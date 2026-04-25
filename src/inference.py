@@ -12,7 +12,7 @@ class ASLModel(nn.Module):
     def __init__(self):
         super(ASLModel, self).__init__()
         self.lstm = nn.LSTM(input_size=63, hidden_size=128, num_layers=2, batch_first=True, dropout=0.3)
-        self.fc = nn.Linear(128, 4)
+        self.fc = nn.Linear(128, len(SIGNS))
 
     def forward(self, x):
         out, _ = self.lstm(x)
@@ -27,6 +27,7 @@ mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
 
 sequence = deque(maxlen=SEQUENCE_LENGTH)
+# buffer smooths predictions by taking the most common result over last 5 frames
 prediction_buffer = deque(maxlen=5)
 current_sign = ""
 confidence = 0.0
@@ -63,10 +64,10 @@ with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7) as hands:
             prediction_buffer.append(predicted)
             most_common = max(set(prediction_buffer), key=prediction_buffer.count)
 
-            if confidence > 0.9:
+            if confidence > 0.9 and SIGNS[most_common] != "nothing":
                 current_sign = SIGNS[most_common]
-                if current_sign == "nothing":
-                    current_sign = ""
+            else:
+                current_sign = ""
 
         display_text = f"Sign: {current_sign} ({confidence:.0%})" if current_sign else "Waiting..."
         color = (0, 255, 0) if current_sign else (0, 165, 255)

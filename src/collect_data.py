@@ -2,24 +2,22 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import os
-import time
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
 
-SIGNS = ["hello", "yes", "no"]
-SEQUENCES = 30
-FRAMES = 30
+SIGNS = ["hello", "yes", "no", "nothing"]
+SEQUENCES = 60  
+FRAMES = 30     
 
 for sign in SIGNS:
     os.makedirs(os.path.join("data", sign), exist_ok=True)
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(1)  # index 1 for Mac built-in camera
 
 with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7) as hands:
     for sign in SIGNS:
 
-        # long countdown when switching to a new sign
         for countdown in range(5, 0, -1):
             ret, frame = cap.read()
             cv2.putText(frame, f"Next sign: {sign.upper()}", (30, 50),
@@ -32,7 +30,6 @@ with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7) as hands:
         for seq in range(SEQUENCES):
             frames = []
 
-            # short countdown between sequences
             for countdown in range(3, 0, -1):
                 ret, frame = cap.read()
                 cv2.putText(frame, f"Sign: {sign.upper()} | Seq {seq + 1}/{SEQUENCES}", (30, 50),
@@ -50,6 +47,7 @@ with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7) as hands:
                 if result.multi_hand_landmarks:
                     for hand_landmarks in result.multi_hand_landmarks:
                         mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                    # flatten 21 landmarks × 3 coordinates into a 63 element array
                     landmarks = np.array([[lm.x, lm.y, lm.z] for lm in result.multi_hand_landmarks[0].landmark]).flatten()
                 else:
                     landmarks = np.zeros(63)
@@ -63,6 +61,7 @@ with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7) as hands:
                 cv2.imshow("Collecting", frame)
                 cv2.waitKey(1)
 
+            # count existing files to avoid overwriting previous recordings
             existing = len(os.listdir(os.path.join("data", sign)))
             np.save(os.path.join("data", sign, f"seq_{existing + seq}.npy"), np.array(frames))
             print(f"Saved sequence {seq + 1}/{SEQUENCES} for '{sign}'")

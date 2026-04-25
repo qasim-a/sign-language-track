@@ -17,6 +17,7 @@ for label, sign in enumerate(SIGNS):
 X = np.array(X)
 y = np.array(y)
 
+# expected shape: (num_sequences, 30, 63)
 print(f"X shape: {X.shape}")
 print(f"y shape: {y.shape}")
 
