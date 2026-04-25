@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">SignLanguage<span>Track</span></div>
+        <div class="status">
+            <span class="status-dot"></span>
+            <span>Live</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="video-panel">
+            <div class="video-wrapper">
+                <img src="/video" alt="Webcam Feed">
+                <div class="video-label">Webcam Feed</div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="card sign-card">
+                <div class="card-label">Detected Sign</div>
+                <div class="sign-display" id="sign">—</div>
+                <div class="confidence-row">
+                    <span class="confidence-label">Confidence</span>
+                    <span class="confidence-value" id="confidence-text">0%</span>
+                </div>
+                <div class="confidence-bar-bg">
+                    <div class="confidence-bar" id="confidence-bar"></div>
+                </div>
+            </div>
+
+            <div class="card history-card">
+                <div class="card-label">Recent Signs</div>
+                <div class="history-list" id="history"></div>
+            </div>
+
+            <div class="card supported-card">
+                <div class="card-label">Supported Signs</div>
+                <div class="supported-list">
+                    <span class="tag">Hello</span>
+                    <span class="tag">Yes</span>
+                    <span class="tag">No</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
