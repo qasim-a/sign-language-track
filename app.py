@@ -9,7 +9,7 @@ import threading
 
 app = Flask(__name__)
 
-SIGNS = ["hello", "yes", "no", "nothing"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):
