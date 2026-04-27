@@ -6,7 +6,7 @@ import os
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
 
-SIGNS = ["hello", "yes", "no", "nothing"]
+SIGNS = ["thank you", "please"]
 SEQUENCES = 60  
 FRAMES = 30     
 
