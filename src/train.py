@@ -32,7 +32,7 @@ class ASLModel(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
-SIGNS = ["hello", "yes", "no", "nothing"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please"]
 model = ASLModel()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
