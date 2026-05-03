@@ -2,6 +2,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, random_split
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 X = np.load("data/X.npy")
 y = np.load("data/y.npy")
@@ -23,7 +26,7 @@ class ASLModel(nn.Module):
     def __init__(self):
         super(ASLModel, self).__init__()
         # LSTM processes the sequence of landmark frames over time
-        self.lstm = nn.LSTM(input_size=63, hidden_size=128, num_layers=2, batch_first=True, dropout=0.3)
+        self.lstm = nn.LSTM(input_size=225, hidden_size=128, num_layers=2, batch_first=True, dropout=0.3)
         self.fc = nn.Linear(128, len(SIGNS))
 
     def forward(self, x):
@@ -32,7 +35,7 @@ class ASLModel(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink"]
 model = ASLModel()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -51,17 +54,31 @@ for epoch in range(EPOCHS):
         total_loss += loss.item()
 
     model.eval()
-    correct = 0
-    total = 0
+    all_preds = []
+    all_labels = []
+
     with torch.no_grad():
         for xb, yb in val_loader:
             output = model(xb)
             preds = torch.argmax(output, dim=1)
-            correct += (preds == yb).sum().item()
-            total += yb.size(0)
+            all_preds.extend(preds.numpy())
+            all_labels.extend(yb.numpy())
 
-    val_acc = correct / total
+    correct = sum(p == l for p, l in zip(all_preds, all_labels))
+    val_acc = correct / len(all_labels)
     print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {total_loss:.4f} | Val Acc: {val_acc:.2f}")
+
+# confusion matrix once after all epochs
+cm = confusion_matrix(all_labels, all_preds)
+plt.figure(figsize=(8, 6))
+sns.heatmap(cm, annot=True, fmt="d", xticklabels=SIGNS, yticklabels=SIGNS, cmap="Blues")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Confusion Matrix")
+plt.tight_layout()
+plt.savefig("models/confusion_matrix.png")
+plt.show()
+print("Confusion matrix saved to models/confusion_matrix.png")
 
 torch.save(model.state_dict(), "models/asl_model.pth")
 print("Model saved.")
