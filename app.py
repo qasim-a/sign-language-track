@@ -9,13 +9,13 @@ import threading
 
 app = Flask(__name__)
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):
     def __init__(self):
         super(ASLModel, self).__init__()
-        self.lstm = nn.LSTM(input_size=63, hidden_size=128, num_layers=2, batch_first=True, dropout=0.3)
+        self.lstm = nn.LSTM(input_size=225, hidden_size=128, num_layers=2, batch_first=True, dropout=0.3)
         self.fc = nn.Linear(128, len(SIGNS))
 
     def forward(self, x):
@@ -28,8 +28,12 @@ model.load_state_dict(torch.load("models/asl_model.pth"))
 model.eval()
 
 mp_hands = mp.solutions.hands
+mp_pose = mp.solutions.pose
 mp_draw = mp.solutions.drawing_utils
-hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+
+# initialize mediapipe outside generate_frames so they persist across frames
+hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7)
+pose = mp_pose.Pose(min_detection_confidence=0.7)
 
 sequence = deque(maxlen=SEQUENCE_LENGTH)
 # buffer smooths predictions by taking the most common result over last 5 frames
@@ -48,16 +52,33 @@ def generate_frames():
             break
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = hands.process(rgb)
+        hand_result = hands.process(rgb)
+        pose_result = pose.process(rgb)
 
-        if result.multi_hand_landmarks:
-            for hand_landmarks in result.multi_hand_landmarks:
+        # --- hand landmarks (left and right, 63 each, zeros if absent) ---
+        left_hand = np.zeros(63)
+        right_hand = np.zeros(63)
+
+        if hand_result.multi_hand_landmarks and hand_result.multi_handedness:
+            for hand_landmarks, handedness in zip(hand_result.multi_hand_landmarks, hand_result.multi_handedness):
+                label = handedness.classification[0].label
+                landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark]).flatten()
+                if label == "Left":
+                    left_hand = landmarks
+                else:
+                    right_hand = landmarks
                 mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-            landmarks = np.array([[lm.x, lm.y, lm.z] for lm in result.multi_hand_landmarks[0].landmark]).flatten()
-        else:
-            landmarks = np.zeros(63)
 
-        sequence.append(landmarks)
+        # --- pose landmarks (33 points, zeros if absent) ---
+        if pose_result.pose_landmarks:
+            pose_landmarks = np.array([[lm.x, lm.y, lm.z] for lm in pose_result.pose_landmarks.landmark]).flatten()
+            mp_draw.draw_landmarks(frame, pose_result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        else:
+            pose_landmarks = np.zeros(99)
+
+        # combine: left hand (63) + right hand (63) + pose (99) = 225 per frame
+        frame_landmarks = np.concatenate([left_hand, right_hand, pose_landmarks])
+        sequence.append(frame_landmarks)
 
         if len(sequence) == SEQUENCE_LENGTH:
             input_tensor = torch.tensor(np.array(sequence), dtype=torch.float32).unsqueeze(0)
@@ -105,4 +126,4 @@ def prediction():
         return jsonify(current_prediction)
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
