@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"]
 
 X = []
 y = []

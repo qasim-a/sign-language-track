@@ -7,7 +7,7 @@ mp_hands = mp.solutions.hands
 mp_pose = mp.solutions.pose
 mp_draw = mp.solutions.drawing_utils
 
-SIGNS = ["eat", "drink"]
+SIGNS = ["apple", "mother"]
 SEQUENCES = 60
 FRAMES = 30
 
