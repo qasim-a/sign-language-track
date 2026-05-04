@@ -9,7 +9,7 @@ import threading
 
 app = Flask(__name__)
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):
@@ -46,6 +46,9 @@ lock = threading.Lock()
 cap = cv2.VideoCapture(1)
 
 def generate_frames():
+    no_hand_frames = 0  # tracks consecutive frames with no hand detected
+    NO_HAND_RESET_THRESHOLD = 15  # clear buffer after this many empty frames
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -58,8 +61,10 @@ def generate_frames():
         # --- hand landmarks (left and right, 63 each, zeros if absent) ---
         left_hand = np.zeros(63)
         right_hand = np.zeros(63)
+        hand_detected = False
 
         if hand_result.multi_hand_landmarks and hand_result.multi_handedness:
+            hand_detected = True
             for hand_landmarks, handedness in zip(hand_result.multi_hand_landmarks, hand_result.multi_handedness):
                 label = handedness.classification[0].label
                 landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark]).flatten()
@@ -75,6 +80,18 @@ def generate_frames():
             mp_draw.draw_landmarks(frame, pose_result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
         else:
             pose_landmarks = np.zeros(99)
+
+        # reset sequence buffer when hand disappears to prevent blended sign sequences
+        if not hand_detected:
+            no_hand_frames += 1
+            if no_hand_frames >= NO_HAND_RESET_THRESHOLD:
+                sequence.clear()
+                prediction_buffer.clear()
+                with lock:
+                    current_prediction["sign"] = ""
+                    current_prediction["confidence"] = 0.0
+        else:
+            no_hand_frames = 0
 
         # combine: left hand (63) + right hand (63) + pose (99) = 225 per frame
         frame_landmarks = np.concatenate([left_hand, right_hand, pose_landmarks])
