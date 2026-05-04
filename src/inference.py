@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from collections import deque
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):
@@ -35,6 +35,9 @@ confidence = 0.0
 
 cap = cv2.VideoCapture(1)
 
+no_hand_frames = 0
+NO_HAND_RESET_THRESHOLD = 8
+
 with mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7) as hands, \
      mp_pose.Pose(min_detection_confidence=0.7) as pose:
     while True:
@@ -46,11 +49,12 @@ with mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7) as hands, \
         hand_result = hands.process(rgb)
         pose_result = pose.process(rgb)
 
-        # --- hand landmarks (left and right, 63 each, zeros if absent) ---
         left_hand = np.zeros(63)
         right_hand = np.zeros(63)
+        hand_detected = False
 
         if hand_result.multi_hand_landmarks and hand_result.multi_handedness:
+            hand_detected = True
             for hand_landmarks, handedness in zip(hand_result.multi_hand_landmarks, hand_result.multi_handedness):
                 label = handedness.classification[0].label
                 landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark]).flatten()
@@ -60,14 +64,23 @@ with mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7) as hands, \
                     right_hand = landmarks
                 mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-        # --- pose landmarks (33 points, zeros if absent) ---
         if pose_result.pose_landmarks:
             pose_landmarks = np.array([[lm.x, lm.y, lm.z] for lm in pose_result.pose_landmarks.landmark]).flatten()
             mp_draw.draw_landmarks(frame, pose_result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
         else:
             pose_landmarks = np.zeros(99)
 
-        # combine: left hand (63) + right hand (63) + pose (99) = 225 per frame
+        # reset sequence buffer when hand disappears to prevent blended sign sequences
+        if not hand_detected:
+            no_hand_frames += 1
+            if no_hand_frames >= NO_HAND_RESET_THRESHOLD:
+                sequence.clear()
+                prediction_buffer.clear()
+                current_sign = ""
+                confidence = 0.0
+        else:
+            no_hand_frames = 0
+
         frame_landmarks = np.concatenate([left_hand, right_hand, pose_landmarks])
         sequence.append(frame_landmarks)
 
