@@ -43,7 +43,7 @@ current_prediction = {"sign": "", "confidence": 0.0, "history": []}
 # lock prevents race conditions between the video stream and prediction threads
 lock = threading.Lock()
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 
 def generate_frames():
     no_hand_frames = 0  # tracks consecutive frames with no hand detected
@@ -110,7 +110,7 @@ def generate_frames():
             most_common = max(set(prediction_buffer), key=prediction_buffer.count)
 
             with lock:
-                if confidence > 0.9 and SIGNS[most_common] != "nothing":
+                if confidence > 0.85 and SIGNS[most_common] != "nothing":
                     sign = SIGNS[most_common]
                     current_prediction["sign"] = sign
                     current_prediction["confidence"] = round(confidence * 100)
