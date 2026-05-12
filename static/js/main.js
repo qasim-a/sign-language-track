@@ -3,37 +3,44 @@ const signEl = document.getElementById('sign');
 const confidenceText = document.getElementById('confidence-text');
 const confidenceBar = document.getElementById('confidence-bar');
 const historyEl = document.getElementById('history');
+const stateIndicator = document.getElementById('state-indicator');
 
-let lastAddedSign = '';
-let signHeldCount = 0;
-const HOLD_THRESHOLD = 2;
+const STATE_CONFIG = {
+    ready:      { label: 'Ready',    cls: 'state-ready' },
+    signing:    { label: 'Signing…', cls: 'state-signing' },
+    predicting: { label: 'Done',     cls: 'state-predicting' },
+};
+
+let lastState = '';
 
 function updatePrediction() {
     fetch('/prediction')
         .then(res => res.json())
         .then(data => {
-            if (data.sign) {
-                signEl.textContent = data.sign.charAt(0).toUpperCase() + data.sign.slice(1);
-                confidenceText.textContent = '';
-                const normalizedConfidence = Math.min(((data.confidence - 90) / 10) * 100, 100);
-                confidenceBar.style.width = `${normalizedConfidence}%`;
+            const state = data.state || 'ready';
 
-                if (data.sign === lastAddedSign) {
-                    signHeldCount++;
-                } else {
-                    signHeldCount = 1;
-                    lastAddedSign = data.sign;
-                }
+            if (state !== lastState) {
+                const cfg = STATE_CONFIG[state] || STATE_CONFIG.ready;
+                stateIndicator.textContent = cfg.label;
+                stateIndicator.className = 'state-indicator ' + cfg.cls;
+                lastState = state;
+            }
 
-                if (signHeldCount === HOLD_THRESHOLD) {
+            if (state === 'predicting') {
+                if (data.sign) {
+                    signEl.textContent = capitalize(data.sign);
+                    confidenceText.textContent = data.confidence + '%';
+                    confidenceBar.style.width = `${data.confidence}%`;
                     addToHistory(data.sign);
+                } else {
+                    signEl.textContent = '—';
+                    confidenceText.textContent = '';
+                    confidenceBar.style.width = '0%';
                 }
-            } else {
-                signEl.textContent = '';
+            } else if (state === 'ready') {
+                signEl.textContent = '—';
                 confidenceText.textContent = '';
                 confidenceBar.style.width = '0%';
-                lastAddedSign = '';
-                signHeldCount = 0;
             }
         });
 }
@@ -42,48 +49,38 @@ function addToHistory(sign) {
     const items = historyEl.querySelectorAll('.history-item');
     if (items.length > 0 && items[0].dataset.sign === sign) return;
 
+    const noSigns = historyEl.querySelector('.no-signs');
+    if (noSigns) noSigns.remove();
+
     const item = document.createElement('div');
     item.className = 'history-item';
     item.dataset.sign = sign;
-    item.textContent = sign.charAt(0).toUpperCase() + sign.slice(1);
-
+    item.textContent = capitalize(sign);
     historyEl.insertBefore(item, historyEl.firstChild);
 
     while (historyEl.children.length > 5) {
         historyEl.removeChild(historyEl.lastChild);
     }
-
-    const noSigns = historyEl.querySelector('.no-signs');
-    if (noSigns) noSigns.remove();
 }
 
 historyEl.innerHTML = '<div class="history-item no-signs" style="color: #bbb">No signs detected yet</div>';
 
-setInterval(updatePrediction, 300);
+setInterval(updatePrediction, 150);
 
-// --- Test Mode ---
+// ─── Test Mode ────────────────────────────────────────────────────────────────
 
 const TEST_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"];
-const ATTEMPT_DURATION_MS = 8000;
 const ATTEMPTS_PER_SIGN = 3;
-const TEST_CONFIDENCE_THRESHOLD = 70; // lower than live mode to capture more data
+const RESULT_DISPLAY_MS = 1200;   // how long to show each result before moving on
 
 let testRunning = false;
-let testResults = [];
-let attemptTimer = null;
-let attemptStartTime = null;
-let timerAnimFrame = null;
-let attemptResolved = false;
+let testResults = [];   // [{ sign, attempts: [{ detected, confidence }] }]
 let pollInterval = null;
 
-// tracks consecutive polls of same sign — mirrors recent signs hold logic
-let testLastSeen = '';
-let testHeldCount = 0;
-
-const testOverlay = document.getElementById('test-overlay');
+const testOverlay    = document.getElementById('test-overlay');
 const resultsOverlay = document.getElementById('results-overlay');
-const startTestBtn = document.getElementById('start-test-btn');
-const cancelTestBtn = document.getElementById('cancel-test-btn');
+const startTestBtn   = document.getElementById('start-test-btn');
+const cancelTestBtn  = document.getElementById('cancel-test-btn');
 const copyResultsBtn = document.getElementById('copy-results-btn');
 const closeResultsBtn = document.getElementById('close-results-btn');
 
@@ -94,210 +91,198 @@ copyResultsBtn.addEventListener('click', () => {
     copyResultsBtn.textContent = 'Copied';
     setTimeout(() => copyResultsBtn.textContent = 'Copy Results', 1500);
 });
-closeResultsBtn.addEventListener('click', () => {
-    resultsOverlay.classList.remove('active');
-});
+closeResultsBtn.addEventListener('click', () => resultsOverlay.classList.remove('active'));
 
 function startTest() {
     testRunning = true;
-    testResults = [];
+    testResults = TEST_SIGNS.map(sign => ({ sign, attempts: [] }));
     testOverlay.classList.add('active');
-    loadSign(0);
+    runAttempt(0, 0);
 }
 
 function cancelTest() {
     testRunning = false;
-    testOverlay.classList.remove('active');
-    clearTimeout(attemptTimer);
-    cancelAnimationFrame(timerAnimFrame);
     clearInterval(pollInterval);
+    testOverlay.classList.remove('active');
 }
 
-function loadSign(signIdx) {
-    testResults[signIdx] = { sign: TEST_SIGNS[signIdx], attempts: [] };
+// ── Core loop: wait for one full ready→signing→predicting cycle ───────────────
+function runAttempt(signIdx, attemptIdx) {
+    if (!testRunning) return;
 
-    document.getElementById('test-progress').textContent = `Sign ${signIdx + 1} of ${TEST_SIGNS.length}`;
-    document.getElementById('test-sign-name').textContent = capitalize(TEST_SIGNS[signIdx]);
+    const sign = TEST_SIGNS[signIdx];
 
-    resetDots();
-    startAttempt(signIdx, 0);
+    // update UI for this attempt
+    document.getElementById('test-progress').textContent =
+        `Sign ${signIdx + 1} of ${TEST_SIGNS.length}`;
+    document.getElementById('test-sign-name').textContent = capitalize(sign);
+    document.getElementById('test-attempt-count').textContent =
+        `Attempt ${attemptIdx + 1} of ${ATTEMPTS_PER_SIGN}`;
+    updateDots(signIdx, attemptIdx, null);   // mark current dot as active, rest neutral
+
+    setStatus('ready-wait', '');    // waiting for backend ready state
+    clearInterval(pollInterval);
+
+    // phase 1 — wait for 'ready' so we don't catch a stale result
+    let phase = 'waitingForReady';
+
+    pollInterval = setInterval(() => {
+        if (!testRunning) return;
+        fetch('/prediction')
+            .then(res => res.json())
+            .then(data => {
+                if (!testRunning) return;
+                const state = data.state || 'ready';
+
+                if (phase === 'waitingForReady') {
+                    if (state === 'ready') {
+                        phase = 'waitingForSign';
+                        setStatus('ready', '');
+                    }
+                    return;
+                }
+
+                if (phase === 'waitingForSign') {
+                    if (state === 'signing') {
+                        phase = 'signing';
+                        setStatus('signing', '');
+                    }
+                    return;
+                }
+
+                if (phase === 'signing') {
+                    if (state === 'predicting') {
+                        phase = 'done';
+                        clearInterval(pollInterval);
+                        handleResult(signIdx, attemptIdx, data.sign, data.confidence);
+                    }
+                    // if state goes back to ready without signing→predicting
+                    // (e.g. very brief hand flash), restart the wait
+                    if (state === 'ready') {
+                        phase = 'waitingForSign';
+                        setStatus('ready', '');
+                    }
+                    return;
+                }
+            });
+    }, 150);
 }
 
-function resetDots() {
+function handleResult(signIdx, attemptIdx, detectedSign, confidence) {
+    if (!testRunning) return;
+
+    const sign = TEST_SIGNS[signIdx];
+    const detected = detectedSign || null;
+    const isCorrect = detected && detected.toLowerCase() === sign.toLowerCase();
+
+    // record
+    testResults[signIdx].attempts.push({ detected, confidence: confidence || 0 });
+
+    // update dot
+    updateDots(signIdx, attemptIdx, isCorrect ? 'correct' : 'incorrect');
+
+    // show result briefly
+    if (detected) {
+        setStatus('result', `${capitalize(detected)} — ${confidence}%`, isCorrect ? 'correct' : 'incorrect');
+    } else {
+        setStatus('result', 'No sign detected', 'neutral');
+    }
+
+    // advance after short display pause
+    setTimeout(() => {
+        if (!testRunning) return;
+
+        const nextAttempt = attemptIdx + 1;
+        if (nextAttempt < ATTEMPTS_PER_SIGN) {
+            runAttempt(signIdx, nextAttempt);
+        } else {
+            const nextSign = signIdx + 1;
+            if (nextSign < TEST_SIGNS.length) {
+                runAttempt(nextSign, 0);
+            } else {
+                finishTest();
+            }
+        }
+    }, RESULT_DISPLAY_MS);
+}
+
+// ── Dot state helpers ─────────────────────────────────────────────────────────
+// currentResult: null (active/pending) | 'correct' | 'incorrect'
+function updateDots(signIdx, currentAttempt, currentResult) {
     for (let i = 0; i < ATTEMPTS_PER_SIGN; i++) {
         const dot = document.getElementById(`dot-${i}`);
         dot.className = 'attempt-dot';
         dot.textContent = i + 1;
-    }
-    document.getElementById('dot-0').classList.add('active');
-}
 
-function startAttempt(signIdx, attemptIdx) {
-    attemptResolved = false;
-    attemptStartTime = Date.now();
-    testLastSeen = '';
-    testHeldCount = 0;
-
-    document.getElementById(`dot-${attemptIdx}`).classList.add('active');
-    document.getElementById('test-live-result').textContent = 'Waiting for sign...';
-    document.getElementById('test-live-result').className = 'test-live-result';
-    document.getElementById('test-status-msg').textContent = `Attempt ${attemptIdx + 1} of ${ATTEMPTS_PER_SIGN} — sign once, hold briefly`;
-
-    animateTimer();
-
-    // poll every 300ms — two consecutive polls of same sign resolves the attempt
-    pollInterval = setInterval(() => {
-        if (attemptResolved) return;
-        fetch('/prediction')
-            .then(res => res.json())
-            .then(data => {
-                if (attemptResolved) return;
-                const liveEl = document.getElementById('test-live-result');
-                const expected = TEST_SIGNS[signIdx].toLowerCase();
-
-                // use lower confidence threshold for test mode
-                const confident = data.confidence >= TEST_CONFIDENCE_THRESHOLD;
-                const detected = confident && data.sign ? data.sign.toLowerCase() : null;
-
-                if (detected) {
-                    if (detected === testLastSeen) {
-                        testHeldCount++;
-                    } else {
-                        testLastSeen = detected;
-                        testHeldCount = 1;
-                    }
-
-                    if (detected === expected) {
-                        liveEl.textContent = `${capitalize(detected)} (${data.confidence}%)`;
-                        liveEl.className = 'test-live-result correct';
-                    } else {
-                        liveEl.textContent = `${capitalize(detected)} (${data.confidence}%)`;
-                        liveEl.className = 'test-live-result incorrect';
-                    }
-
-                    // two consecutive polls of same sign = resolve attempt immediately
-                    if (testHeldCount >= 2) {
-                        clearInterval(pollInterval);
-                        clearTimeout(attemptTimer);
-                        cancelAnimationFrame(timerAnimFrame);
-                        attemptResolved = true;
-                        recordAttempt(signIdx, attemptIdx, detected, data.confidence);
-                    }
-                } else {
-                    testLastSeen = '';
-                    testHeldCount = 0;
-                    // show low confidence detection if present, helps diagnose blanks
-                    if (data.sign && !confident) {
-                        liveEl.textContent = `${capitalize(data.sign)} (${data.confidence}% — below threshold)`;
-                    } else {
-                        liveEl.textContent = 'Waiting for sign...';
-                    }
-                    liveEl.className = 'test-live-result';
-                }
-            });
-    }, 300);
-
-    // 5 second max — records blank if nothing held for 2 consecutive polls
-    attemptTimer = setTimeout(() => {
-        if (attemptResolved) return;
-        clearInterval(pollInterval);
-        cancelAnimationFrame(timerAnimFrame);
-        attemptResolved = true;
-        if (testLastSeen) {
-            recordAttempt(signIdx, attemptIdx, testLastSeen, null);
-        } else {
-            recordAttempt(signIdx, attemptIdx, null, null);
-        }
-    }, ATTEMPT_DURATION_MS);
-}
-
-function recordAttempt(signIdx, attemptIdx, detectedSign, confidence) {
-    const expected = TEST_SIGNS[signIdx].toLowerCase();
-    const detected = detectedSign ? detectedSign.toLowerCase() : null;
-
-    let result;
-    if (!detected) {
-        result = 'blank';
-    } else if (detected === expected) {
-        result = 'correct';
-    } else {
-        result = 'incorrect';
-    }
-
-    testResults[signIdx].attempts.push({ result, detected, confidence });
-
-    const dot = document.getElementById(`dot-${attemptIdx}`);
-    dot.classList.remove('active');
-    if (result === 'correct') { dot.classList.add('correct'); dot.textContent = 'OK'; }
-    else if (result === 'incorrect') { dot.classList.add('incorrect'); dot.textContent = 'X'; }
-    else { dot.classList.add('blank'); dot.textContent = '-'; }
-
-    const nextAttempt = attemptIdx + 1;
-
-    if (nextAttempt < ATTEMPTS_PER_SIGN) {
-        document.getElementById('test-status-msg').textContent = 'Drop your hand — next attempt in 2 seconds';
-        setTimeout(() => {
-            if (!testRunning) return;
-            startAttempt(signIdx, nextAttempt);
-        }, 2000);
-    } else {
-        const nextSign = signIdx + 1;
-        if (nextSign < TEST_SIGNS.length) {
-            document.getElementById('test-status-msg').textContent = 'Next sign in 2 seconds...';
-            setTimeout(() => {
-                if (!testRunning) return;
-                loadSign(nextSign);
-            }, 2000);
-        } else {
-            finishTest();
+        if (i < currentAttempt) {
+            // already recorded — look up stored result
+            const a = testResults[signIdx].attempts[i];
+            if (a) {
+                const correct = a.detected && a.detected.toLowerCase() === TEST_SIGNS[signIdx].toLowerCase();
+                dot.classList.add(correct ? 'correct' : 'incorrect');
+                dot.textContent = correct ? '✓' : '✗';
+            }
+        } else if (i === currentAttempt) {
+            if (currentResult === 'correct')        { dot.classList.add('correct');   dot.textContent = '✓'; }
+            else if (currentResult === 'incorrect') { dot.classList.add('incorrect'); dot.textContent = '✗'; }
+            else                                    { dot.classList.add('active'); }
         }
     }
 }
 
-function animateTimer() {
-    cancelAnimationFrame(timerAnimFrame);
-    const bar = document.getElementById('test-timer-bar');
+// ── Status display ────────────────────────────────────────────────────────────
+function setStatus(type, message, tone) {
+    const liveEl  = document.getElementById('test-live-result');
+    const statusEl = document.getElementById('test-status-msg');
 
-    function tick() {
-        const elapsed = Date.now() - attemptStartTime;
-        const pct = Math.max(0, 100 - (elapsed / ATTEMPT_DURATION_MS) * 100);
-        bar.style.width = `${pct}%`;
-        if (pct > 0 && !attemptResolved) {
-            timerAnimFrame = requestAnimationFrame(tick);
-        }
+    liveEl.className = 'test-live-result';
+    statusEl.className = 'test-status-msg';
+
+    if (type === 'ready-wait') {
+        liveEl.textContent = '';
+        statusEl.textContent = 'Waiting for ready state…';
+    } else if (type === 'ready') {
+        liveEl.textContent = '';
+        statusEl.textContent = 'Ready — sign when you\'re set';
+    } else if (type === 'signing') {
+        liveEl.textContent = 'Signing detected…';
+        statusEl.textContent = 'Drop your hand when done';
+    } else if (type === 'result') {
+        liveEl.textContent = message;
+        liveEl.classList.add(tone === 'correct' ? 'correct' : tone === 'incorrect' ? 'incorrect' : '');
+        statusEl.textContent = '';
     }
-    timerAnimFrame = requestAnimationFrame(tick);
 }
 
+// ── Results ───────────────────────────────────────────────────────────────────
 function finishTest() {
     testRunning = false;
+    clearInterval(pollInterval);
     testOverlay.classList.remove('active');
-    cancelAnimationFrame(timerAnimFrame);
 
     const date = new Date().toLocaleString();
     let totalAttempts = 0;
-    let totalCorrect = 0;
+    let totalCorrect  = 0;
     let lines = [];
 
     lines.push(`SignLanguageTrack Test Results`);
     lines.push(`${date}`);
-    lines.push(`Signs tested: ${TEST_SIGNS.length}`);
+    lines.push(`Signs tested: ${TEST_SIGNS.length}  ·  Attempts per sign: ${ATTEMPTS_PER_SIGN}`);
     lines.push(``);
 
     testResults.forEach(signResult => {
-        const name = capitalize(signResult.sign);
-        lines.push(`${name}`);
+        lines.push(`${capitalize(signResult.sign)}`);
         signResult.attempts.forEach((a, i) => {
             totalAttempts++;
-            if (a.result === 'correct') {
-                totalCorrect++;
-                const conf = a.confidence ? ` (${a.confidence}%)` : '';
-                lines.push(`  Attempt ${i + 1}: correct${conf}`);
-            } else if (a.result === 'incorrect') {
-                const conf = a.confidence ? ` (${a.confidence}%)` : '';
-                lines.push(`  Attempt ${i + 1}: incorrect — recognized as ${capitalize(a.detected)}${conf}`);
+            const correct = a.detected && a.detected.toLowerCase() === signResult.sign.toLowerCase();
+            if (correct) totalCorrect++;
+            const label  = correct ? 'correct' : 'incorrect';
+            const det    = a.detected ? capitalize(a.detected) : '—';
+            const conf   = a.confidence ? `${a.confidence}%` : '—';
+            if (correct) {
+                lines.push(`  Attempt ${i + 1}: ${label} · ${conf}`);
             } else {
-                lines.push(`  Attempt ${i + 1}: blank — nothing recognized`);
+                lines.push(`  Attempt ${i + 1}: ${label} · recognized as ${det} · ${conf}`);
             }
         });
         lines.push(``);
@@ -308,7 +293,7 @@ function finishTest() {
 
     document.getElementById('results-text').textContent = lines.join('\n');
     document.getElementById('results-summary').textContent =
-        `${totalCorrect} of ${totalAttempts} attempts correct (${pct}%)`;
+        `${totalCorrect} of ${totalAttempts} attempts correct · ${pct}%`;
 
     resultsOverlay.classList.add('active');
 }

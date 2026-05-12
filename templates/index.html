@@ -8,6 +8,25 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
+        /* --- State Indicator (video overlay) --- */
+        .state-indicator {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 12px;
+            border-radius: 20px;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s, color 0.2s;
+        }
+        .state-ready      { background: rgba(34, 197, 94, 0.18);  color: #22c55e; }
+        .state-signing    { background: rgba(249, 115, 22, 0.18); color: #f97316; }
+        .state-predicting { background: rgba(139, 92, 246, 0.18); color: #8b5cf6; }
+
         /* --- Test Mode Overlay --- */
         #test-overlay {
             display: none;
@@ -37,8 +56,16 @@
             font-size: 12px;
             color: #aaa;
             letter-spacing: 0.08em;
-            margin-bottom: 12px;
+            margin-bottom: 4px;
             text-transform: uppercase;
+        }
+
+        .test-attempt-count {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: #ccc;
+            letter-spacing: 0.06em;
+            margin-bottom: 16px;
         }
 
         .test-sign-prompt {
@@ -76,37 +103,24 @@
             align-items: center;
             justify-content: center;
             font-family: 'DM Mono', monospace;
-            font-size: 11px;
+            font-size: 13px;
             color: #bbb;
             transition: all 0.2s;
         }
-        .attempt-dot.correct { background: #e6f7ee; border-color: #2ecc71; color: #2ecc71; font-weight: 600; }
+        .attempt-dot.correct   { background: #e6f7ee; border-color: #2ecc71; color: #2ecc71; font-weight: 600; }
         .attempt-dot.incorrect { background: #fdecea; border-color: #e74c3c; color: #e74c3c; font-weight: 600; }
-        .attempt-dot.blank { background: #f5f5f5; border-color: #ccc; color: #aaa; }
-        .attempt-dot.active { border-color: #E87722; color: #E87722; }
-
-        .test-timer-bar-bg {
-            height: 4px;
-            background: #f0f0f0;
-            border-radius: 2px;
-            overflow: hidden;
-            margin-bottom: 16px;
-        }
-        .test-timer-bar {
-            height: 100%;
-            background: #E87722;
-            border-radius: 2px;
-            transition: width 0.1s linear;
-        }
+        .attempt-dot.active    { border-color: #E87722; color: #E87722; }
 
         .test-live-result {
             font-family: 'DM Mono', monospace;
-            font-size: 13px;
+            font-size: 16px;
+            font-weight: 500;
             color: #888;
-            min-height: 20px;
+            min-height: 24px;
             margin-bottom: 8px;
+            transition: color 0.15s;
         }
-        .test-live-result.correct { color: #2ecc71; }
+        .test-live-result.correct   { color: #2ecc71; }
         .test-live-result.incorrect { color: #e74c3c; }
 
         .test-status-msg {
@@ -183,12 +197,11 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .btn-primary { background: #E87722; color: #fff; }
-        .btn-primary:hover { background: #d06a1a; }
-        .btn-secondary { background: #f0f0f0; color: #555; }
-        .btn-secondary:hover { background: #e4e4e4; }
+        .btn-primary            { background: #E87722; color: #fff; }
+        .btn-primary:hover      { background: #d06a1a; }
+        .btn-secondary          { background: #f0f0f0; color: #555; }
+        .btn-secondary:hover    { background: #e4e4e4; }
 
-        /* --- Start Test Button --- */
         #start-test-btn {
             font-family: 'DM Sans', sans-serif;
             font-size: 13px;
@@ -220,7 +233,7 @@
         <div class="video-panel">
             <div class="video-wrapper">
                 <img src="/video" alt="Webcam Feed">
-                <div class="video-label">Webcam Feed</div>
+                <div class="state-indicator state-ready" id="state-indicator">Ready</div>
             </div>
         </div>
 
@@ -230,7 +243,7 @@
                 <div class="sign-display" id="sign">—</div>
                 <div class="confidence-row">
                     <span class="confidence-label">Confidence</span>
-                    <span class="confidence-value" id="confidence-text">0%</span>
+                    <span class="confidence-value" id="confidence-text"></span>
                 </div>
                 <div class="confidence-bar-bg">
                     <div class="confidence-bar" id="confidence-bar"></div>
@@ -265,6 +278,7 @@
     <div id="test-overlay">
         <div class="test-box">
             <div class="test-progress" id="test-progress">Sign 1 of 11</div>
+            <div class="test-attempt-count" id="test-attempt-count">Attempt 1 of 3</div>
             <div class="test-sign-prompt">Sign this word</div>
             <div class="test-sign-name" id="test-sign-name">Hello</div>
             <div class="test-attempts" id="test-attempts">
@@ -272,11 +286,8 @@
                 <div class="attempt-dot" id="dot-1">2</div>
                 <div class="attempt-dot" id="dot-2">3</div>
             </div>
-            <div class="test-timer-bar-bg">
-                <div class="test-timer-bar" id="test-timer-bar" style="width:100%"></div>
-            </div>
-            <div class="test-live-result" id="test-live-result">Waiting for sign...</div>
-            <div class="test-status-msg" id="test-status-msg">You have 8 seconds per attempt</div>
+            <div class="test-live-result" id="test-live-result"></div>
+            <div class="test-status-msg" id="test-status-msg">Sign once, then drop your hand</div>
         </div>
         <button class="btn btn-secondary" id="cancel-test-btn">Cancel Test</button>
     </div>

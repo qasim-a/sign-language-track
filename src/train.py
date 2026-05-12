@@ -6,6 +6,8 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"]
+
 X = np.load("data/X.npy")
 y = np.load("data/y.npy")
 
@@ -35,7 +37,6 @@ class ASLModel(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"]
 model = ASLModel()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -53,28 +54,39 @@ for epoch in range(EPOCHS):
         optimizer.step()
         total_loss += loss.item()
 
+    # validation pass every epoch to track accuracy
     model.eval()
-    all_preds = []
-    all_labels = []
-
+    correct = 0
+    total = 0
     with torch.no_grad():
         for xb, yb in val_loader:
             output = model(xb)
             preds = torch.argmax(output, dim=1)
-            all_preds.extend(preds.numpy())
-            all_labels.extend(yb.numpy())
+            correct += (preds == yb).sum().item()
+            total += yb.size(0)
 
-    correct = sum(p == l for p, l in zip(all_preds, all_labels))
-    val_acc = correct / len(all_labels)
+    val_acc = correct / total
     print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {total_loss:.4f} | Val Acc: {val_acc:.2f}")
 
-# confusion matrix once after all epochs
+# full validation pass after all epochs for confusion matrix
+# this evaluates every validation sample, not just the last batch
+model.eval()
+all_preds = []
+all_labels = []
+
+with torch.no_grad():
+    for xb, yb in val_loader:
+        output = model(xb)
+        preds = torch.argmax(output, dim=1)
+        all_preds.extend(preds.numpy())
+        all_labels.extend(yb.numpy())
+
 cm = confusion_matrix(all_labels, all_preds)
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(10, 8))
 sns.heatmap(cm, annot=True, fmt="d", xticklabels=SIGNS, yticklabels=SIGNS, cmap="Blues")
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
-plt.title("Confusion Matrix")
+plt.title("Confusion Matrix (full validation set)")
 plt.tight_layout()
 plt.savefig("models/confusion_matrix.png")
 plt.show()

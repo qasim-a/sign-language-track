@@ -6,6 +6,7 @@ import torch.nn as nn
 from collections import deque
 from flask import Flask, render_template, Response, jsonify
 import threading
+import time
 
 app = Flask(__name__)
 
@@ -35,19 +36,55 @@ mp_draw = mp.solutions.drawing_utils
 hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7)
 pose = mp_pose.Pose(min_detection_confidence=0.7)
 
+# rolling frame buffer — fills during SIGNING state, consumed once on transition to PREDICTING
 sequence = deque(maxlen=SEQUENCE_LENGTH)
-# buffer smooths predictions by taking the most common result over last 5 frames
-prediction_buffer = deque(maxlen=5)
 
-current_prediction = {"sign": "", "confidence": 0.0, "history": []}
+current_prediction = {
+    "sign": "",
+    "confidence": 0.0,
+    "history": [],
+    "state": "ready"    # "ready" | "signing" | "predicting"
+}
+
 # lock prevents race conditions between the video stream and prediction threads
 lock = threading.Lock()
 
 cap = cv2.VideoCapture(0)
 
+def run_inference(frames):
+    """Run the LSTM once on a completed sequence. Always returns a result — no confidence threshold.
+    Only suppresses the 'nothing' class since that's not a real sign."""
+    if len(frames) < SEQUENCE_LENGTH:
+        # pad with zeros at the front if we didn't get a full 30 frames
+        pad = [np.zeros(225)] * (SEQUENCE_LENGTH - len(frames))
+        frames = pad + list(frames)
+
+    input_tensor = torch.tensor(np.array(frames), dtype=torch.float32).unsqueeze(0)
+    with torch.no_grad():
+        output = model(input_tensor)
+        probs = torch.softmax(output, dim=1)
+        confidence, predicted = torch.max(probs, dim=1)
+        confidence = confidence.item()
+        predicted = predicted.item()
+
+    sign = SIGNS[predicted]
+
+    # suppress "nothing" — that class absorbs non-sign frames, not a user-facing result
+    if sign == "nothing":
+        return None, round(confidence * 100)
+
+    return sign, round(confidence * 100)
+
 def generate_frames():
-    no_hand_frames = 0  # tracks consecutive frames with no hand detected
-    NO_HAND_RESET_THRESHOLD = 15  # clear buffer after this many empty frames
+    # --- state machine ---
+    # READY      : waiting for hand to appear
+    # SIGNING    : hand detected, accumulating frames
+    # PREDICTING : hand gone, inference fired, result on screen
+    #              auto-resets to READY after 1.5s or immediately on new hand
+    state = "ready"
+    no_hand_frames = 0
+    NO_HAND_TRIGGER = 5     # frames of absent hand before sign is considered complete
+    predict_time = None     # set on first frame of predicting state
 
     while True:
         ret, frame = cap.read()
@@ -58,7 +95,7 @@ def generate_frames():
         hand_result = hands.process(rgb)
         pose_result = pose.process(rgb)
 
-        # --- hand landmarks (left and right, 63 each, zeros if absent) ---
+        # --- extract landmarks ---
         left_hand = np.zeros(63)
         right_hand = np.zeros(63)
         hand_detected = False
@@ -74,54 +111,87 @@ def generate_frames():
                     right_hand = landmarks
                 mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-        # --- pose landmarks (33 points, zeros if absent) ---
         if pose_result.pose_landmarks:
             pose_landmarks = np.array([[lm.x, lm.y, lm.z] for lm in pose_result.pose_landmarks.landmark]).flatten()
             mp_draw.draw_landmarks(frame, pose_result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
         else:
             pose_landmarks = np.zeros(99)
 
-        # reset sequence buffer when hand disappears to prevent blended sign sequences
-        if not hand_detected:
-            no_hand_frames += 1
-            if no_hand_frames >= NO_HAND_RESET_THRESHOLD:
-                sequence.clear()
-                prediction_buffer.clear()
-                with lock:
-                    current_prediction["sign"] = ""
-                    current_prediction["confidence"] = 0.0
-        else:
-            no_hand_frames = 0
-
-        # combine: left hand (63) + right hand (63) + pose (99) = 225 per frame
         frame_landmarks = np.concatenate([left_hand, right_hand, pose_landmarks])
-        sequence.append(frame_landmarks)
 
-        if len(sequence) == SEQUENCE_LENGTH:
-            input_tensor = torch.tensor(np.array(sequence), dtype=torch.float32).unsqueeze(0)
-            with torch.no_grad():
-                output = model(input_tensor)
-                probs = torch.softmax(output, dim=1)
-                confidence, predicted = torch.max(probs, dim=1)
-                confidence = confidence.item()
-                predicted = predicted.item()
-
-            prediction_buffer.append(predicted)
-            most_common = max(set(prediction_buffer), key=prediction_buffer.count)
-
-            with lock:
-                if confidence > 0.85 and SIGNS[most_common] != "nothing":
-                    sign = SIGNS[most_common]
-                    current_prediction["sign"] = sign
-                    current_prediction["confidence"] = round(confidence * 100)
-                    history = current_prediction["history"]
-                    if not history or history[-1] != sign:
-                        history.append(sign)
-                        if len(history) > 5:
-                            history.pop(0)
-                else:
+        # --- state transitions ---
+        if state == "ready":
+            if hand_detected:
+                state = "signing"
+                no_hand_frames = 0
+                sequence.clear()
+                sequence.append(frame_landmarks)
+                with lock:
+                    current_prediction["state"] = "signing"
                     current_prediction["sign"] = ""
                     current_prediction["confidence"] = 0.0
+
+        elif state == "signing":
+            if hand_detected:
+                no_hand_frames = 0
+                sequence.append(frame_landmarks)
+            else:
+                no_hand_frames += 1
+                # keep appending during brief occlusions so motion isn't cut short
+                sequence.append(frame_landmarks)
+
+                if no_hand_frames >= NO_HAND_TRIGGER:
+                    # sign is complete — run inference once
+                    state = "predicting"
+                    predict_time = None
+                    sign, confidence = run_inference(list(sequence))
+
+                    with lock:
+                        current_prediction["state"] = "predicting"
+                        if sign:
+                            current_prediction["sign"] = sign
+                            current_prediction["confidence"] = confidence
+                            history = current_prediction["history"]
+                            if not history or history[-1] != sign:
+                                history.append(sign)
+                                if len(history) > 5:
+                                    history.pop(0)
+                        else:
+                            # "nothing" class predicted — show blank result
+                            current_prediction["sign"] = ""
+                            current_prediction["confidence"] = 0.0
+
+                    sequence.clear()
+
+        elif state == "predicting":
+            if predict_time is None:
+                predict_time = time.time()
+
+            # auto-reset to ready after 1.5s, or immediately if a new hand appears
+            if time.time() - predict_time > 1.5 or hand_detected:
+                state = "ready"
+                predict_time = None
+                with lock:
+                    current_prediction["state"] = "ready"
+                    current_prediction["sign"] = ""
+                    current_prediction["confidence"] = 0.0
+
+        # --- video overlay ---
+        overlay_color = {
+            "ready":      (100, 200, 100),
+            "signing":    (50,  180, 255),
+            "predicting": (80,  80,  220),
+        }[state]
+
+        overlay_text = {
+            "ready":      "READY",
+            "signing":    f"SIGNING  {len(sequence)}/{SEQUENCE_LENGTH}",
+            "predicting": "DONE",
+        }[state]
+
+        cv2.rectangle(frame, (12, 12), (260, 48), (0, 0, 0), -1)
+        cv2.putText(frame, overlay_text, (20, 38),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, overlay_color, 2)
 
         ret, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()
@@ -132,7 +202,6 @@ def generate_frames():
 def index():
     return render_template('index.html')
 
-# streams webcam frames as multipart JPEG to the browser
 @app.route('/video')
 def video():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
