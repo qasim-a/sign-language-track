@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
-        /* --- State Indicator (video overlay) --- */
+        /* --- State Indicator --- */
         .state-indicator {
             position: absolute;
             top: 16px;
@@ -27,8 +27,8 @@
         .state-signing    { background: rgba(249, 115, 22, 0.18); color: #f97316; }
         .state-predicting { background: rgba(139, 92, 246, 0.18); color: #8b5cf6; }
 
-        /* --- Test Mode Overlay --- */
-        #test-overlay {
+        /* --- Shared overlay base --- */
+        .overlay {
             display: none;
             position: fixed;
             inset: 0;
@@ -39,14 +39,128 @@
             justify-content: center;
             gap: 24px;
         }
-        #test-overlay.active { display: flex; }
+        .overlay.active { display: flex; }
 
+        /* --- Selection overlay --- */
+        .selection-box {
+            background: #fff;
+            border-radius: 16px;
+            padding: 36px 40px;
+            width: 100%;
+            max-width: 520px;
+            text-align: center;
+        }
+
+        .selection-title {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 20px;
+            font-weight: 600;
+            color: #111;
+            margin-bottom: 6px;
+        }
+
+        .selection-subtitle {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: #bbb;
+            letter-spacing: 0.06em;
+            margin-bottom: 24px;
+        }
+
+        /* Test All button */
+        #test-all-btn {
+            width: 100%;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 14px 20px;
+            border-radius: 10px;
+            border: none;
+            background: #E87722;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-bottom: 24px;
+        }
+        #test-all-btn:hover { background: #d06a1a; }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .divider-line {
+            flex: 1;
+            height: 1px;
+            background: #eee;
+        }
+        .divider-text {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: #ccc;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        /* Sign grid */
+        #sign-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .sign-tag {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 99px;
+            border: 1.5px solid #e8e8e4;
+            background: #f7f7f5;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .sign-tag:hover { border-color: #E87722; color: #E87722; }
+        .sign-tag.selected {
+            background: #fff3e8;
+            border-color: #E87722;
+            color: #E87722;
+            font-weight: 600;
+        }
+
+        /* Start custom button */
+        #start-custom-btn {
+            width: 100%;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: 1.5px solid #E87722;
+            background: transparent;
+            color: #E87722;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        #start-custom-btn:hover:not(:disabled) { background: #E87722; color: #fff; }
+        #start-custom-btn:disabled {
+            border-color: #e0e0e0;
+            color: #ccc;
+            cursor: default;
+        }
+
+        /* --- Test overlay --- */
         .test-box {
             background: #fff;
             border-radius: 16px;
             padding: 40px 48px;
             min-width: 380px;
-            max-width: 480px;
+            max-width: 520px;
             width: 100%;
             text-align: center;
         }
@@ -89,23 +203,25 @@
 
         .test-attempts {
             display: flex;
+            flex-wrap: wrap;
             justify-content: center;
-            gap: 12px;
+            gap: 8px;
             margin-bottom: 28px;
         }
 
         .attempt-dot {
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             border: 2px solid #e0e0e0;
             display: flex;
             align-items: center;
             justify-content: center;
             font-family: 'DM Mono', monospace;
-            font-size: 13px;
+            font-size: 11px;
             color: #bbb;
             transition: all 0.2s;
+            flex-shrink: 0;
         }
         .attempt-dot.correct   { background: #e6f7ee; border-color: #2ecc71; color: #2ecc71; font-weight: 600; }
         .attempt-dot.incorrect { background: #fdecea; border-color: #e74c3c; color: #e74c3c; font-weight: 600; }
@@ -130,19 +246,7 @@
             min-height: 18px;
         }
 
-        /* --- Results Screen --- */
-        #results-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.82);
-            z-index: 100;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        #results-overlay.active { display: flex; }
-
+        /* --- Results overlay --- */
         .results-box {
             background: #fff;
             border-radius: 16px;
@@ -182,10 +286,7 @@
             user-select: all;
         }
 
-        .results-actions {
-            display: flex;
-            gap: 10px;
-        }
+        .results-actions { display: flex; gap: 10px; }
 
         .btn {
             font-family: 'DM Sans', sans-serif;
@@ -197,11 +298,12 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .btn-primary            { background: #E87722; color: #fff; }
-        .btn-primary:hover      { background: #d06a1a; }
-        .btn-secondary          { background: #f0f0f0; color: #555; }
-        .btn-secondary:hover    { background: #e4e4e4; }
+        .btn-primary          { background: #E87722; color: #fff; }
+        .btn-primary:hover    { background: #d06a1a; }
+        .btn-secondary        { background: #f0f0f0; color: #555; }
+        .btn-secondary:hover  { background: #e4e4e4; }
 
+        /* --- Header run test button --- */
         #start-test-btn {
             font-family: 'DM Sans', sans-serif;
             font-size: 13px;
@@ -274,18 +376,35 @@
         </div>
     </main>
 
-    <!-- Test Mode Overlay -->
-    <div id="test-overlay">
+    <!-- Selection Overlay -->
+    <div class="overlay" id="selection-overlay">
+        <div class="selection-box">
+            <div class="selection-title">Run Test</div>
+            <div class="selection-subtitle">6 attempts per sign · all signs</div>
+
+            <button id="test-all-btn">Test All Signs</button>
+
+            <div class="divider">
+                <div class="divider-line"></div>
+                <div class="divider-text">or pick signs</div>
+                <div class="divider-line"></div>
+            </div>
+
+            <div id="sign-grid"></div>
+
+            <button id="start-custom-btn" disabled>Select signs to start</button>
+        </div>
+        <button class="btn btn-secondary" id="cancel-sel-btn">Cancel</button>
+    </div>
+
+    <!-- Test Overlay -->
+    <div class="overlay" id="test-overlay">
         <div class="test-box">
             <div class="test-progress" id="test-progress">Sign 1 of 11</div>
-            <div class="test-attempt-count" id="test-attempt-count">Attempt 1 of 3</div>
+            <div class="test-attempt-count" id="test-attempt-count">Attempt 1 of 6</div>
             <div class="test-sign-prompt">Sign this word</div>
             <div class="test-sign-name" id="test-sign-name">Hello</div>
-            <div class="test-attempts" id="test-attempts">
-                <div class="attempt-dot active" id="dot-0">1</div>
-                <div class="attempt-dot" id="dot-1">2</div>
-                <div class="attempt-dot" id="dot-2">3</div>
-            </div>
+            <div class="test-attempts" id="test-attempts"></div>
             <div class="test-live-result" id="test-live-result"></div>
             <div class="test-status-msg" id="test-status-msg">Sign once, then drop your hand</div>
         </div>
@@ -293,7 +412,7 @@
     </div>
 
     <!-- Results Overlay -->
-    <div id="results-overlay">
+    <div class="overlay" id="results-overlay">
         <div class="results-box">
             <div class="results-title">Test Results</div>
             <div class="results-summary" id="results-summary"></div>

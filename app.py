@@ -50,6 +50,7 @@ current_prediction = {
 lock = threading.Lock()
 
 cap = cv2.VideoCapture(0)
+print(f"Camera resolution: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 
 def run_inference(frames):
     """Run the LSTM once on a completed sequence. Always returns a result — no confidence threshold.
