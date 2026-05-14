@@ -10,7 +10,7 @@ import time
 
 app = Flask(__name__)
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):
@@ -190,9 +190,7 @@ def generate_frames():
             "predicting": "DONE",
         }[state]
 
-        cv2.rectangle(frame, (12, 12), (260, 48), (0, 0, 0), -1)
-        cv2.putText(frame, overlay_text, (20, 38),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, overlay_color, 2)
+        
 
         ret, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()

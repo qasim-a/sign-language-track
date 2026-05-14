@@ -69,7 +69,7 @@ setInterval(updatePrediction, 150);
 
 // ─── Test Mode ────────────────────────────────────────────────────────────────
 
-const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother"];
+const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book"];
 const ATTEMPTS_ALL    = 6;   // attempts per sign when testing all signs
 const ATTEMPTS_CUSTOM = 9;   // attempts per sign when testing a custom selection
 const RESULT_DISPLAY_MS = 1200;
@@ -198,6 +198,17 @@ function cancelTest() {
 function runAttempt(signIdx, attemptIdx) {
     if (!testRunning) return;
 
+    // silent delay before the very first attempt only
+    if (signIdx === 0 && attemptIdx === 0) {
+        setTimeout(() => runAttempt_inner(signIdx, attemptIdx), 1200);
+        return;
+    }
+    runAttempt_inner(signIdx, attemptIdx);
+}
+
+function runAttempt_inner(signIdx, attemptIdx) {
+    if (!testRunning) return;
+
     const sign = testSigns[signIdx];
 
     document.getElementById('test-progress').textContent =
@@ -255,18 +266,19 @@ function runAttempt(signIdx, attemptIdx) {
 function handleResult(signIdx, attemptIdx, detectedSign, confidence) {
     if (!testRunning) return;
 
-    const sign      = testSigns[signIdx];
-    const detected  = detectedSign || null;
-    const isCorrect = detected && detected.toLowerCase() === sign.toLowerCase();
-
-    testResults[signIdx].attempts.push({ detected, confidence: confidence || 0 });
-    updateDots(signIdx, attemptIdx, isCorrect ? 'correct' : 'incorrect');
-
-    if (detected) {
-        setStatus('result', `${capitalize(detected)} — ${confidence}%`, isCorrect ? 'correct' : 'incorrect');
-    } else {
-        setStatus('result', 'No sign detected', 'neutral');
+    // if model returned nothing, silently retry the same attempt
+    if (!detectedSign) {
+        runAttempt(signIdx, attemptIdx);
+        return;
     }
+
+    const sign      = testSigns[signIdx];
+    const detected  = detectedSign.toLowerCase();
+    const isCorrect = detected === sign.toLowerCase();
+
+    testResults[signIdx].attempts.push({ detected: detectedSign, confidence: confidence || 0 });
+    updateDots(signIdx, attemptIdx, isCorrect ? 'correct' : 'incorrect');
+    setStatus('result', `${capitalize(detectedSign)} — ${confidence}%`, isCorrect ? 'correct' : 'incorrect');
 
     setTimeout(() => {
         if (!testRunning) return;
