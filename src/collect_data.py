@@ -15,9 +15,9 @@ mp_draw = mp.solutions.drawing_utils
 #   messy: seq_messy_000.npy, seq_messy_001.npy ...
 MESSY = False
 
-SIGNS = ["eat", "drink", "water", "more", "apple", "mother", "father", "book"]
-SEQUENCES = 20      # number of sequences to record per sign in this session
-FRAMES = 30         # frames per sequence — must match model input (do not change)
+SIGNS = ["more", "go"]
+SEQUENCES = 20     # number of sequences to record per sign in this session
+FRAMES = 30        # frames per sequence — must match model input (do not change)
 CAMERA = 0          # camera index — change to 1 if using external webcam
 
 # ─────────────────────────────────────────────────────────────────────────────

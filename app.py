@@ -10,7 +10,7 @@ import time
 
 app = Flask(__name__)
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):
@@ -84,7 +84,7 @@ def generate_frames():
     #              auto-resets to READY after 1.5s or immediately on new hand
     state = "ready"
     no_hand_frames = 0
-    NO_HAND_TRIGGER = 5     # frames of absent hand before sign is considered complete
+    NO_HAND_TRIGGER = 8     # frames of absent hand before sign is considered complete
     predict_time = None     # set on first frame of predicting state
 
     while True:

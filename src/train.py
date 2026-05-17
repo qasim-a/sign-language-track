@@ -6,7 +6,7 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go"]
 
 X = np.load("data/X.npy")
 y = np.load("data/y.npy")
@@ -39,9 +39,9 @@ class ASLModel(nn.Module):
 
 model = ASLModel()
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)
 
-EPOCHS = 50
+EPOCHS = 100
 
 for epoch in range(EPOCHS):
     model.train()

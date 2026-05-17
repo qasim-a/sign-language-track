@@ -69,7 +69,7 @@ setInterval(updatePrediction, 150);
 
 // ─── Test Mode ────────────────────────────────────────────────────────────────
 
-const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book"];
+const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go"];
 const ATTEMPTS_ALL    = 6;   // attempts per sign when testing all signs
 const ATTEMPTS_CUSTOM = 9;   // attempts per sign when testing a custom selection
 const RESULT_DISPLAY_MS = 1200;
