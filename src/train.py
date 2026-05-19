@@ -6,7 +6,7 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go", "night", "day", "break", "cow", "monkey"]
 
 X = np.load("data/X.npy")
 y = np.load("data/y.npy")
