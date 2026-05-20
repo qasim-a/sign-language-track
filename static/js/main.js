@@ -70,16 +70,16 @@ setInterval(updatePrediction, 150);
 // ─── Test Mode ────────────────────────────────────────────────────────────────
 
 const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go", "night", "day", "break", "cow", "monkey"];
-const ATTEMPTS_ALL    = 6;   // attempts per sign when testing all signs
-const ATTEMPTS_CUSTOM = 9;   // attempts per sign when testing a custom selection
+const ATTEMPTS_ALL    = 6;
+const ATTEMPTS_CUSTOM = 9;
 const RESULT_DISPLAY_MS = 1200;
 
-let testRunning    = false;
-let testSigns      = [];     // signs selected for this run
+let testRunning     = false;
+let testSigns       = [];
 let attemptsPerSign = ATTEMPTS_ALL;
-let testResults    = [];
-let pollInterval   = null;
-let selectedSigns  = new Set();  // tracks which signs are toggled in the picker
+let testResults     = [];
+let pollInterval    = null;
+let selectedSigns   = new Set();
 
 const selectionOverlay = document.getElementById('selection-overlay');
 const testOverlay      = document.getElementById('test-overlay');
@@ -113,7 +113,6 @@ testAllBtn.addEventListener('click', () => {
 startCustomBtn.addEventListener('click', () => {
     if (selectedSigns.size === 0) return;
     selectionOverlay.classList.remove('active');
-    // preserve the original sign order
     const ordered = ALL_SIGNS.filter(s => selectedSigns.has(s));
     beginTest(ordered, ATTEMPTS_CUSTOM);
 });
@@ -157,10 +156,7 @@ function beginTest(signs, attempts) {
     attemptsPerSign = attempts;
     testRunning     = true;
     testResults     = signs.map(sign => ({ sign, attempts: [] }));
-
-    // build dots dynamically based on attempt count
     buildDots(attempts);
-
     testOverlay.classList.add('active');
     runAttempt(0, 0);
 }
@@ -198,7 +194,18 @@ function cancelTest() {
 function runAttempt(signIdx, attemptIdx) {
     if (!testRunning) return;
 
-    // silent delay before the very first attempt only
+    // always update UI immediately so correct sign name and state show
+    // during any delay — this fixes the "last test sign still showing" bug
+    const sign = testSigns[signIdx];
+    document.getElementById('test-progress').textContent =
+        `Sign ${signIdx + 1} of ${testSigns.length}`;
+    document.getElementById('test-sign-name').textContent = capitalize(sign);
+    document.getElementById('test-attempt-count').textContent =
+        `Attempt ${attemptIdx + 1} of ${attemptsPerSign}`;
+    updateDots(signIdx, attemptIdx, null);
+    setStatus('ready-wait', '');
+
+    // silent 1200ms delay before the very first attempt only
     if (signIdx === 0 && attemptIdx === 0) {
         setTimeout(() => runAttempt_inner(signIdx, attemptIdx), 1200);
         return;
@@ -208,17 +215,6 @@ function runAttempt(signIdx, attemptIdx) {
 
 function runAttempt_inner(signIdx, attemptIdx) {
     if (!testRunning) return;
-
-    const sign = testSigns[signIdx];
-
-    document.getElementById('test-progress').textContent =
-        `Sign ${signIdx + 1} of ${testSigns.length}`;
-    document.getElementById('test-sign-name').textContent = capitalize(sign);
-    document.getElementById('test-attempt-count').textContent =
-        `Attempt ${attemptIdx + 1} of ${attemptsPerSign}`;
-    updateDots(signIdx, attemptIdx, null);
-
-    setStatus('ready-wait', '');
     clearInterval(pollInterval);
 
     let phase = 'waitingForReady';
