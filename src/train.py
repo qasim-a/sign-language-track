@@ -16,23 +16,17 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SIGNS = [
-    "hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink",
-    "water", "more", "apple", "mother", "father", "book", "walk", "cold",
-    "hot", "me", "you", "black", "carrot", "go", "night", "day", "break",
-    "cow", "monkey"
-]
-
-EPOCHS   = 100
-LR       = 0.0003
-BATCH    = 16
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "go", "break", "cow", "monkey", "draw"]
+EPOCHS = 100
+LR     = 0.0003
+BATCH  = 16
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 X = np.load("data/X.npy")
 y = np.load("data/y.npy")
 
 X_tensor = torch.tensor(X, dtype=torch.float32)
-y_tensor = torch.tensor(y, dtype=torch.long)
+y_tensor  = torch.tensor(y, dtype=torch.long)
 
 dataset = TensorDataset(X_tensor, y_tensor)
 
@@ -46,7 +40,7 @@ train_set, val_set = random_split(
 
 train_loader = DataLoader(train_set, batch_size=BATCH, shuffle=True,
                           generator=torch.Generator().manual_seed(SEED))
-val_loader   = DataLoader(val_set,   batch_size=BATCH)
+val_loader   = DataLoader(val_set, batch_size=BATCH)
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 class ASLModel(nn.Module):
@@ -68,6 +62,9 @@ criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
 # ── Training loop ─────────────────────────────────────────────────────────────
+# saves the best model whenever val acc improves — protects against late spikes
+best_val_acc = 0.0
+
 for epoch in range(EPOCHS):
     model.train()
     total_loss = 0
@@ -79,7 +76,7 @@ for epoch in range(EPOCHS):
         optimizer.step()
         total_loss += loss.item()
 
-    # validation pass every epoch to track accuracy
+    # validation pass every epoch
     model.eval()
     correct = 0
     total   = 0
@@ -91,9 +88,22 @@ for epoch in range(EPOCHS):
             total   += yb.size(0)
 
     val_acc = correct / total
-    print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {total_loss:.4f} | Val Acc: {val_acc:.2f}")
 
-# ── Confusion matrix (full validation set) ────────────────────────────────────
+    # save whenever val acc improves — best model, not last model
+    if val_acc > best_val_acc:
+        best_val_acc = val_acc
+        torch.save(model.state_dict(), "models/asl_model.pth")
+        saved_marker = " Saved"
+    else:
+        saved_marker = ""
+
+    print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {total_loss:.4f} | Val Acc: {val_acc:.2f}{saved_marker}")
+
+print(f"\nTraining complete. Best val acc: {best_val_acc:.4f}")
+
+# ── Confusion matrix (full validation pass on best saved model) ───────────────
+# reload best weights before evaluating — ensures matrix reflects best model
+model.load_state_dict(torch.load("models/asl_model.pth"))
 model.eval()
 all_preds  = []
 all_labels = []
@@ -106,16 +116,14 @@ with torch.no_grad():
         all_labels.extend(yb.numpy())
 
 cm = confusion_matrix(all_labels, all_preds)
-plt.figure(figsize=(14, 12))
+plt.figure(figsize=(16, 14))
 sns.heatmap(cm, annot=True, fmt="d", xticklabels=SIGNS, yticklabels=SIGNS,
             cmap="Blues")
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
-plt.title(f"Confusion Matrix (full validation set) — seed {SEED}")
+plt.title(f"Confusion Matrix (best model, seed {SEED}) — best val acc: {best_val_acc:.4f}")
 plt.tight_layout()
 plt.savefig("models/confusion_matrix.png")
 plt.show()
 print("Confusion matrix saved to models/confusion_matrix.png")
-
-torch.save(model.state_dict(), "models/asl_model.pth")
-print(f"Model saved. (seed={SEED}, lr={LR}, epochs={EPOCHS})")
+print(f"Model saved. (seed={SEED}, lr={LR}, epochs={EPOCHS}, best_val_acc={best_val_acc:.4f})")
