@@ -2,7 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .DS_Store
-data/
-models/
 docs/
 .env
+data/X.npy
+data/y.npy

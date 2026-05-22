@@ -10,7 +10,7 @@ import time
 
 app = Flask(__name__)
 
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "go", "break", "cow", "monkey", "draw"]
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "black", "carrot", "go", "day", "break", "cow", "monkey", "draw", "type"]
 SEQUENCE_LENGTH = 30
 
 class ASLModel(nn.Module):

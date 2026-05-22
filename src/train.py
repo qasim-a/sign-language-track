@@ -9,17 +9,18 @@ import matplotlib.pyplot as plt
 
 # ── Reproducibility ───────────────────────────────────────────────────────────
 # Fixed seed ensures identical train/val split and weight initialization
-# every retrain on the same data. Change SEED to try a different split.
-SEED = 7
+# every retrain on the same data.
+SEED = 43
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "go", "break", "cow", "monkey", "draw"]
-EPOCHS = 100
-LR     = 0.0003
-BATCH  = 16
+SIGNS = ["hello", "yes", "no", "nothing", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "black", "carrot", "go", "day", "break", "cow", "monkey", "draw", "type"]
+EPOCHS        = 100
+LR            = 0.0003
+BATCH         = 16
+MIN_VAL_ACC   = 0.98   # model only saved when val acc meets this threshold
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 X = np.load("data/X.npy")
@@ -62,8 +63,12 @@ criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
 # ── Training loop ─────────────────────────────────────────────────────────────
-# saves the best model whenever val acc improves — protects against late spikes
-best_val_acc = 0.0
+# composite save criterion:
+#   1. val acc must be >= MIN_VAL_ACC
+#   2. among qualifying epochs, save when val acc improves OR
+#      val acc ties but loss is lower (better converged model)
+best_val_acc          = 0.0
+best_loss_at_best_acc = float('inf')
 
 for epoch in range(EPOCHS):
     model.train()
@@ -89,20 +94,23 @@ for epoch in range(EPOCHS):
 
     val_acc = correct / total
 
-    # save whenever val acc improves — best model, not last model
-    if val_acc > best_val_acc:
-        best_val_acc = val_acc
-        torch.save(model.state_dict(), "models/asl_model.pth")
-        saved_marker = " Saved"
-    else:
-        saved_marker = ""
+    # composite save criterion
+    saved_marker = ""
+    if val_acc >= MIN_VAL_ACC:
+        if val_acc > best_val_acc or (val_acc == best_val_acc and total_loss < best_loss_at_best_acc):
+            best_val_acc          = val_acc
+            best_loss_at_best_acc = total_loss
+            torch.save(model.state_dict(), "models/asl_model.pth")
+            saved_marker = f" saved"
 
     print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {total_loss:.4f} | Val Acc: {val_acc:.2f}{saved_marker}")
 
-print(f"\nTraining complete. Best val acc: {best_val_acc:.4f}")
+print(f"\nTraining complete.")
+print(f"Best val acc: {best_val_acc:.4f} | Loss at save: {best_loss_at_best_acc:.4f}")
 
 # ── Confusion matrix (full validation pass on best saved model) ───────────────
 # reload best weights before evaluating — ensures matrix reflects best model
+# not whatever the weights happen to be at the final epoch
 model.load_state_dict(torch.load("models/asl_model.pth"))
 model.eval()
 all_preds  = []
@@ -121,9 +129,9 @@ sns.heatmap(cm, annot=True, fmt="d", xticklabels=SIGNS, yticklabels=SIGNS,
             cmap="Blues")
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
-plt.title(f"Confusion Matrix (best model, seed {SEED}) — best val acc: {best_val_acc:.4f}")
+plt.title(f"Confusion Matrix (best model, seed {SEED}) — val acc: {best_val_acc:.4f} | loss: {best_loss_at_best_acc:.4f}")
 plt.tight_layout()
 plt.savefig("models/confusion_matrix.png")
 plt.show()
 print("Confusion matrix saved to models/confusion_matrix.png")
-print(f"Model saved. (seed={SEED}, lr={LR}, epochs={EPOCHS}, best_val_acc={best_val_acc:.4f})")
+print(f"Model: seed={SEED}, lr={LR}, epochs={EPOCHS}, min_val_acc={MIN_VAL_ACC}")

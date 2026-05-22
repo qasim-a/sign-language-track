@@ -69,9 +69,9 @@ setInterval(updatePrediction, 150);
 
 // ─── Test Mode ────────────────────────────────────────────────────────────────
 
-const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "me", "you", "black", "carrot", "go", "night", "day", "break", "cow", "monkey", "draw", "help", "see", "type"];
-const ATTEMPTS_ALL    = 6;
-const ATTEMPTS_CUSTOM = 9;
+const ALL_SIGNS = ["hello", "yes", "no", "thank you", "please", "eat", "drink", "water", "more", "apple", "mother", "father", "book", "walk", "cold", "hot", "black", "carrot", "go", "day", "break", "cow", "monkey", "draw", "type"];
+const ATTEMPTS_ALL    = 3;
+const ATTEMPTS_CUSTOM = 6;
 const RESULT_DISPLAY_MS = 1200;
 
 let testRunning     = false;
