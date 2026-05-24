@@ -15,8 +15,8 @@ mp_draw = mp.solutions.drawing_utils
 #   messy: seq_messy_000.npy, seq_messy_001.npy ...
 MESSY = False
 
-SIGNS = ["day"]
-SEQUENCES = 20    # number of sequences to record per sign in this session
+SIGNS = []
+SEQUENCES = 30    # number of sequences to record per sign in this session
 FRAMES = 30        # frames per sequence — must match model input (do not change)
 CAMERA = 0          # camera index — change to 1 if using external webcam
 
