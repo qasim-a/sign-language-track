@@ -1,6 +1,6 @@
 # SignLanguageTrack
 
-Real-time ASL recognition in the browser — no server, no installation. A webcam captures hand gestures, MediaPipe extracts skeletal landmarks, and a 2-layer LSTM classifies sequences of 30 frames into one of 25 signs.
+Real-time ASL recognition that runs entirely in the browser. No server, no installation required. A webcam captures hand gestures, MediaPipe extracts skeletal landmarks, and a 2-layer LSTM classifies sequences of 30 frames into one of 25 signs.
 
 **[Live Demo →](https://qasim-a.github.io/sign-language-track)**
 
@@ -33,7 +33,7 @@ Each frame produces a 225-dimensional feature vector:
 
 ### Model
 
-A 2-layer LSTM (`input=225 → hidden=128 → FC=26`) trained in PyTorch and exported to ONNX for browser inference. The model takes only the final hidden state for classification — the sequence is consumed, not the intermediate outputs.
+A 2-layer LSTM (`input=225 → hidden=128 → FC=26`) trained in PyTorch and exported to ONNX for browser inference. Only the final hidden state is passed to the classifier. The LSTM reads the full 30-frame sequence but classifies based on what it knows at the end.
 
 ```python
 LSTM(input_size=225, hidden_size=128, num_layers=2, dropout=0.3)
@@ -43,7 +43,7 @@ LSTM(input_size=225, hidden_size=128, num_layers=2, dropout=0.3)
 
 ### Inference State Machine
 
-A three-state FSM manages sign boundaries — this is what makes real-time recognition practical rather than noisy:
+A three-state FSM handles sign boundaries. Without it the model would fire on every frame and produce garbage results.
 
 ```
 READY ──── hand appears ────→ SIGNING ──── 8 frames no hand ────→ PREDICTING
@@ -67,7 +67,7 @@ The FSM prevents the model from firing continuously and ensures a clean boundary
 | Privacy | Local only | Fully local, no data sent |
 | Dependencies | Python, MediaPipe, OpenCV | None (CDN-loaded) |
 
-The PyTorch model is exported to ONNX via `src/convert_to_onnx.py`; `docs/inference.js` is a faithful port of `app.py` — same feature vector layout, same FSM logic, same zero-padding for short sequences, same suppression of the `nothing` class.
+The PyTorch model is exported to ONNX once; `docs/inference.js` is a faithful port of `app/app.py`
 
 ---
 
@@ -149,12 +149,9 @@ SignLanguageTrack/
 ├── src/
 │   ├── collect_data.py     # webcam data collection with clean/messy modes
 │   ├── preprocess.py       # assembles X.npy / y.npy from per-sign .npy files
-│   ├── train.py            # LSTM training, checkpointing, confusion matrix
-│   ├── convert_to_onnx.py  # exports asl_model.pth → asl_model.onnx
-│   └── inference.py        # standalone inference script (local, no Flask)
+│   └── train.py            # LSTM training, checkpointing, confusion matrix
 ├── models/
-│   ├── asl_model.pth       # PyTorch weights (current)
-│   ├── asl_model.onnx      # ONNX export for browser inference
+│   ├── asl_model.pth       # PyTorch weights
 │   └── confusion_matrix.png
 ├── docs/                   # GitHub Pages deployment (served as static site)
 │   ├── index.html
@@ -162,14 +159,14 @@ SignLanguageTrack/
 │   ├── main.js
 │   ├── inference.js        # browser-side port of app.py (MediaPipe + ONNX)
 │   └── asl_model.onnx
-├── data/                   # per-sign folders of .npy sequences (gitignored)
-├── notebooks/
-│   └── explore.ipynb       # exploratory analysis
-├── templates/index.html    # Flask UI (local version)
-├── static/
-│   ├── css/style.css
-│   └── js/main.js          # local app frontend + structured test suite
-├── app.py                  # Flask server (local version)
+├── app/                    # local Flask app
+│   ├── app.py
+│   ├── templates/
+│   │   └── index.html
+│   └── static/
+│       ├── css/style.css
+│       └── js/main.js      # includes structured real-time test suite
+├── data/                   # per-sign .npy sequences (gitignored)
 └── requirements.txt
 ```
 
@@ -181,7 +178,7 @@ SignLanguageTrack/
 git clone https://github.com/qasim-a/sign-language-track
 cd sign-language-track
 pip install -r requirements.txt
-python app.py
+python app/app.py
 # open http://localhost:5000
 ```
 
