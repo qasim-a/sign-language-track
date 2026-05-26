@@ -213,33 +213,7 @@
 
             <div class="card supported-card">
                 <div class="card-label">Supported Signs</div>
-                <div class="supported-list">
-                    <span class="tag">Hello</span>
-                    <span class="tag">Yes</span>
-                    <span class="tag">No</span>
-                    <span class="tag">Thank you</span>
-                    <span class="tag">Please</span>
-                    <span class="tag">Eat</span>
-                    <span class="tag">Drink</span>
-                    <span class="tag">Water</span>
-                    <span class="tag">More</span>
-                    <span class="tag">Apple</span>
-                    <span class="tag">Mother</span>
-                    <span class="tag">Father</span>
-                    <span class="tag">Book</span>
-                    <span class="tag">Walk</span>
-                    <span class="tag">Cold</span>
-                    <span class="tag">Hot</span>
-                    <span class="tag">Black</span>
-                    <span class="tag">Carrot</span>
-                    <span class="tag">Go</span>
-                    <span class="tag">Day</span>
-                    <span class="tag">Break</span>
-                    <span class="tag">Cow</span>
-                    <span class="tag">Monkey</span>
-                    <span class="tag">Draw</span>
-                    <span class="tag">Type</span>
-                </div>
+                <div class="supported-list" id="supported-list"></div>
             </div>
         </div>
     </main>
@@ -248,7 +222,7 @@
     <div class="overlay active" id="how-to-overlay">
         <div class="how-to-box">
             <div class="how-to-title">How to Use</div>
-            <div class="how-to-subtitle">Real-time ASL sign recognition · 25 signs supported</div>
+            <div class="how-to-subtitle">Real-time ASL sign recognition · 24 signs supported</div>
             <div class="how-to-steps">
                 <div class="how-to-step">
                     <span class="step-num">1</span>
@@ -266,11 +240,54 @@
                     <span class="step-num">4</span>
                     <span class="step-text"><strong>Repeat for the next sign</strong> — recent signs are tracked on the right</span>
                 </div>
+                <div class="how-to-step">
+                    <span class="step-num">5</span>
+                    <span class="step-text"><strong>Tap any sign</strong> in the supported list to see how it's performed on SignASL</span>
+                </div>
             </div>
             <button id="got-it-btn">Start Signing</button>
         </div>
     </div>
 
+    <script>
+        const SIGN_URLS = {
+            "hello":     "https://www.signasl.org/sign/hello",
+            "yes":       "https://www.signasl.org/sign/yes",
+            "no":        "https://www.signasl.org/sign/no",
+            "thank you": "https://www.signasl.org/sign/thank-you",
+            "please":    "https://www.signasl.org/sign/please",
+            "eat":       "https://www.signasl.org/sign/eat",
+            "drink":     "https://www.signasl.org/sign/drink",
+            "water":     "https://www.signasl.org/sign/water",
+            "more":      "https://www.signasl.org/sign/more",
+            "apple":     "https://www.signasl.org/sign/apple",
+            "mother":    "https://www.signasl.org/sign/mother",
+            "father":    "https://www.signasl.org/sign/father",
+            "book":      "https://www.signasl.org/sign/book",
+            "walk":      "https://www.signasl.org/sign/walk",
+            "cold":      "https://www.signasl.org/sign/cold",
+            "hot":       "https://www.signasl.org/sign/hot",
+            "black":     "https://www.signasl.org/sign/black",
+            "carrot":    "https://www.signasl.org/sign/carrot",
+            "go":        "https://www.signasl.org/sign/go",
+            "day":       "https://www.signasl.org/sign/day",
+            "break":     "https://www.signasl.org/sign/break",
+            "cow":       "https://www.signasl.org/sign/cow",
+            "monkey":    "https://www.signasl.org/sign/monkey",
+            "draw":      "https://www.signasl.org/sign/draw",
+            "type":      "https://www.signasl.org/sign/type",
+        };
+        const grid = document.getElementById('supported-list');
+        Object.entries(SIGN_URLS).forEach(([sign, url]) => {
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.className = 'tag';
+            a.textContent = sign.charAt(0).toUpperCase() + sign.slice(1);
+            grid.appendChild(a);
+        });
+    </script>
     <script type="module" src="./main.js"></script>
 </body>
 </html>
