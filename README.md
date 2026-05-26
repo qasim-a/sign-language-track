@@ -4,8 +4,7 @@ Real-time ASL recognition that runs entirely in the browser. No server, no insta
 
 **[Live Demo →](https://qasim-a.github.io/sign-language-track)**
 
-<!-- DEMO VIDEO — embed here once recorded -->
-<!-- ![Demo](demo.gif) -->
+![Demo](assets/demo.gif)
 
 ---
 
