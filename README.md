@@ -1,294 +1,197 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignLanguageTrack</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./style.css">
+# SignLanguageTrack
 
-    <!-- MediaPipe -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+Real-time ASL recognition that runs entirely in the browser. No server, no installation required. A webcam captures hand gestures, MediaPipe extracts skeletal landmarks, and a 2-layer LSTM classifies sequences of 30 frames into one of 24 signs.
 
-    <!-- ONNX Runtime Web -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+**[Live Demo →](https://qasim-a.github.io/sign-language-track)**
 
-    <style>
-        /* --- State Indicator --- */
-        .state-indicator {
-            position: absolute;
-            top: 16px;
-            left: 16px;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.75rem;
-            font-weight: 500;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            padding: 5px 12px;
-            border-radius: 20px;
-            backdrop-filter: blur(4px);
-            transition: background 0.2s, color 0.2s;
-            z-index: 10;
-        }
-        .state-ready      { background: rgba(34, 197, 94, 0.18);  color: #22c55e; }
-        .state-signing    { background: rgba(249, 115, 22, 0.18); color: #f97316; }
-        .state-predicting { background: rgba(139, 92, 246, 0.18); color: #8b5cf6; }
+![Demo](assets/demo.gif)
 
-        /* video + canvas overlay */
-        .video-wrapper video,
-        .video-wrapper canvas {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            object-fit: cover;
-        }
-        .video-wrapper video  { z-index: 1; }
-        .video-wrapper canvas { z-index: 2; }
+---
 
-        /* loading overlay */
-        .loading-msg {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.8rem;
-            color: #888;
-            z-index: 3;
-            background: var(--surface);
-        }
+## How It Works
 
-        /* --- How to Use button in header --- */
-        #how-to-btn {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 13px;
-            font-weight: 500;
-            padding: 9px 18px;
-            border-radius: 8px;
-            border: 1.5px solid var(--border);
-            background: transparent;
-            color: var(--text-secondary);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        #how-to-btn:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
+```
+Webcam → MediaPipe (hands + pose) → 225-feature vector × 30 frames
+       → LSTM classifier → FSM (READY → SIGNING → PREDICTING) → UI
+```
 
-        /* --- How to Use modal overlay --- */
-        .overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.6);
-            z-index: 100;
-            align-items: center;
-            justify-content: center;
-        }
-        .overlay.active { display: flex; }
+Each frame produces a 225-dimensional feature vector:
 
-        .how-to-box {
-            background: #fff;
-            border-radius: 20px;
-            padding: 40px 44px;
-            max-width: 460px;
-            width: 100%;
-            box-shadow: 0 8px 40px rgba(0,0,0,0.15);
-        }
+| Source | Points | Features |
+|---|---|---|
+| Left hand | 21 landmarks × (x, y, z) | 63 |
+| Right hand | 21 landmarks × (x, y, z) | 63 |
+| Body pose | 33 landmarks × (x, y, z) | 99 |
+| **Total per frame** | | **225** |
 
-        .how-to-title {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 22px;
-            font-weight: 600;
-            color: #111;
-            margin-bottom: 6px;
-        }
+30 frames are accumulated into a sequence `[30 × 225]`, which the LSTM processes as a temporal signal to capture the motion arc of each sign.
 
-        .how-to-subtitle {
-            font-family: 'DM Mono', monospace;
-            font-size: 11px;
-            color: #bbb;
-            letter-spacing: 0.06em;
-            margin-bottom: 28px;
-        }
+---
 
-        .how-to-steps {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            margin-bottom: 32px;
-        }
+## Architecture
 
-        .how-to-step {
-            display: flex;
-            align-items: flex-start;
-            gap: 14px;
-        }
+### Model
 
-        .step-num {
-            font-family: 'DM Mono', monospace;
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: var(--accent);
-            background: var(--accent-light);
-            border-radius: 99px;
-            padding: 3px 10px;
-            flex-shrink: 0;
-            margin-top: 1px;
-        }
+A 2-layer LSTM (`input=225 → hidden=128 → FC=26`) trained in PyTorch and exported to ONNX for browser inference. Only the final hidden state is passed to the classifier. The LSTM reads the full 30-frame sequence but classifies based on what it knows at the end.
 
-        .step-text {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.9rem;
-            color: #444;
-            line-height: 1.5;
-        }
+```python
+LSTM(input_size=225, hidden_size=128, num_layers=2, dropout=0.3)
+→ FC(128, 26)
+→ softmax → argmax
+```
 
-        .step-text strong {
-            color: #111;
-            font-weight: 600;
-        }
+### Inference State Machine
 
-        #got-it-btn {
-            width: 100%;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 14px 20px;
-            border-radius: 10px;
-            border: none;
-            background: var(--accent);
-            color: #fff;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        #got-it-btn:hover { background: #d06a1a; }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="logo">SignLanguage<span>Track</span></div>
-        <div style="display:flex;align-items:center;gap:16px;">
-            <button id="how-to-btn">How to Use</button>
-            <div class="status">
-                <span class="status-dot"></span>
-                <span id="status-label">Loading…</span>
-            </div>
-        </div>
-    </header>
+A three-state FSM handles sign boundaries. Without it the model would fire on every frame and produce garbage results.
 
-    <main>
-        <div class="video-panel">
-            <div class="video-wrapper">
-                <video id="webcam" autoplay playsinline muted style="display:none;"></video>
-                <canvas id="overlay"></canvas>
-                <div class="loading-msg" id="loading-msg">Starting camera…</div>
-                <div class="state-indicator state-ready" id="state-indicator">Ready</div>
-            </div>
-        </div>
+```
+READY ──── hand appears ────→ SIGNING ──── 8 frames no hand ────→ PREDICTING
+  ↑                                                                     │
+  └─────────────── 1.5s timeout OR new hand detected ──────────────────┘
+```
 
-        <div class="info-panel">
-            <div class="card sign-card">
-                <div class="card-label">Detected Sign</div>
-                <div class="sign-display" id="sign">—</div>
-                <div class="confidence-row">
-                    <span class="confidence-label">Confidence</span>
-                    <span class="confidence-value" id="confidence-text"></span>
-                </div>
-                <div class="confidence-bar-bg">
-                    <div class="confidence-bar" id="confidence-bar"></div>
-                </div>
-            </div>
+- **READY**: waiting for a hand to enter frame
+- **SIGNING**: accumulating landmark frames into the rolling buffer; brief occlusions are tolerated (frames continue to accumulate rather than cutting the sequence short)
+- **PREDICTING**: inference fires once on the completed sequence; result displayed for 1.5s then resets
 
-            <div class="card history-card">
-                <div class="card-label">Recent Signs</div>
-                <div class="history-list" id="history"></div>
-            </div>
+The FSM prevents the model from firing continuously and ensures a clean boundary between consecutive signs.
 
-            <div class="card supported-card">
-                <div class="card-label">Supported Signs</div>
-                <div class="supported-list" id="supported-list"></div>
-            </div>
-        </div>
-    </main>
+### Two Deployment Paths
 
-    <!-- How to Use Modal -->
-    <div class="overlay active" id="how-to-overlay">
-        <div class="how-to-box">
-            <div class="how-to-title">How to Use</div>
-            <div class="how-to-subtitle">Real-time ASL sign recognition · 25 signs supported</div>
-            <div class="how-to-steps">
-                <div class="how-to-step">
-                    <span class="step-num">1</span>
-                    <span class="step-text"><strong>Allow camera access</strong> when prompted by your browser</span>
-                </div>
-                <div class="how-to-step">
-                    <span class="step-num">2</span>
-                    <span class="step-text"><strong>Perform an ASL sign</strong> clearly in front of your camera</span>
-                </div>
-                <div class="how-to-step">
-                    <span class="step-num">3</span>
-                    <span class="step-text"><strong>Lower your hand</strong> — the sign will be recognized instantly</span>
-                </div>
-                <div class="how-to-step">
-                    <span class="step-num">4</span>
-                    <span class="step-text"><strong>Repeat for the next sign</strong> — recent signs are tracked on the right</span>
-                </div>
-                <div class="how-to-step">
-                    <span class="step-num">5</span>
-                    <span class="step-text"><strong>Tap any sign</strong> in the supported list to see how it's performed on SignASL</span>
-                </div>
-            </div>
-            <button id="got-it-btn">Start Signing</button>
-        </div>
-    </div>
+| | Local (Flask) | Browser (GitHub Pages) |
+|---|---|---|
+| Runtime | Python + PyTorch | ONNX Runtime Web |
+| Inference | Server-side | On-device (no server) |
+| Latency | Webcam → Flask → UI | Webcam → browser |
+| Privacy | Local only | Fully local, no data sent |
+| Dependencies | Python, MediaPipe, OpenCV | None (CDN-loaded) |
 
-    <script>
-        const SIGN_URLS = {
-            "hello":     "https://www.signasl.org/sign/hello",
-            "yes":       "https://www.signasl.org/sign/yes",
-            "no":        "https://www.signasl.org/sign/no",
-            "nothing":   "https://www.signasl.org/sign/nothing",
-            "thank you": "https://www.signasl.org/sign/thank-you",
-            "please":    "https://www.signasl.org/sign/please",
-            "eat":       "https://www.signasl.org/sign/eat",
-            "drink":     "https://www.signasl.org/sign/drink",
-            "water":     "https://www.signasl.org/sign/water",
-            "more":      "https://www.signasl.org/sign/more",
-            "apple":     "https://www.signasl.org/sign/apple",
-            "mother":    "https://www.signasl.org/sign/mother",
-            "father":    "https://www.signasl.org/sign/father",
-            "book":      "https://www.signasl.org/sign/book",
-            "walk":      "https://www.signasl.org/sign/walk",
-            "cold":      "https://www.signasl.org/sign/cold",
-            "hot":       "https://www.signasl.org/sign/hot",
-            "black":     "https://www.signasl.org/sign/black",
-            "carrot":    "https://www.signasl.org/sign/carrot",
-            "go":        "https://www.signasl.org/sign/go",
-            "day":       "https://www.signasl.org/sign/day",
-            "break":     "https://www.signasl.org/sign/break",
-            "cow":       "https://www.signasl.org/sign/cow",
-            "monkey":    "https://www.signasl.org/sign/monkey",
-            "draw":      "https://www.signasl.org/sign/draw",
-            "type":      "https://www.signasl.org/sign/type",
-        };
-        const grid = document.getElementById('supported-list');
-        Object.entries(SIGN_URLS).forEach(([sign, url]) => {
-            const a = document.createElement('a');
-            a.href = url;
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-            a.className = 'tag';
-            a.textContent = sign.charAt(0).toUpperCase() + sign.slice(1);
-            grid.appendChild(a);
-        });
-    </script>
-    <script type="module" src="./main.js"></script>
-</body>
-</html>
+The PyTorch model is exported to ONNX once; `docs/inference.js` is a faithful port of `app/app.py`
+
+---
+
+## Dataset
+
+~2,500 sequences across 25 classes collected via a custom pipeline (`collect_data.py`). 24 are user-facing signs; `nothing` is a control class that absorbs non-sign frames and is suppressed from output. Each sequence is 30 frames × 225 features, recorded at webcam framerate.
+
+| Sign | Clean | Messy | Total |
+|---|---|---|---|
+| hello | 100 | 0 | 100 |
+| yes | 100 | 20 | 120 |
+| no | 90 | 20 | 110 |
+| nothing *(control class)* | 70 | 0 | 70 |
+| thank you | 70 | 20 | 90 |
+| please | 100 | 20 | 120 |
+| eat | 60 | 40 | 100 |
+| drink | 100 | 20 | 120 |
+| water | 100 | 40 | 140 |
+| more | 90 | 10 | 100 |
+| apple | 70 | 10 | 80 |
+| mother | 90 | 10 | 100 |
+| father | 70 | 20 | 90 |
+| book | 70 | 30 | 100 |
+| walk | 70 | 10 | 80 |
+| cold | 70 | 10 | 80 |
+| hot | 80 | 10 | 90 |
+| black | 70 | 40 | 110 |
+| carrot | 70 | 30 | 100 |
+| go | 90 | 20 | 110 |
+| day | 70 | 20 | 90 |
+| break | 50 | 20 | 70 |
+| cow | 50 | 0 | 50 |
+| monkey | 50 | 20 | 70 |
+| draw | 50 | 40 | 90 |
+| type | 70 | 40 | 110 |
+
+### Clean vs. Messy Sequences
+
+A key design decision: every sign was recorded in two modes.
+
+**Clean** sequences start with hands in the sign's initial position at frame 1 and end at the final position at frame 30 — ideal, controlled examples.
+
+**Messy** sequences simulate real-world entry/exit conditions: hands entering from off-frame before the sign, or dropping away after it. This directly addresses the distribution shift between training data and live inference — in the app, hands always start from rest, not from the start position of a sign.
+
+The clean/messy ratio per sign was determined empirically by watching which signs were being confused with each other in real-time testing and adding targeted messy sequences to fix boundary artifacts.
+
+---
+
+## Training
+
+```
+python src/preprocess.py   # builds data/X.npy, data/y.npy
+python src/train.py        # trains and saves models/asl_model.pth
+```
+
+Key decisions in `train.py`:
+
+- **Fixed seed (43)** across `random`, `numpy`, and `torch` — ensures identical train/val splits and weight initialization on every retrain
+- **80/20 split** — deterministic with the fixed seed
+- **Composite save criterion** — model is only saved when validation accuracy ≥ 98%, and among qualifying epochs, saved when val acc improves *or* ties with lower loss (better-converged model preferred)
+- **Best-model reload before evaluation** — confusion matrix is generated from the best saved checkpoint, not the final epoch's weights
+
+### Results
+
+Validation accuracy: **99.6%** | Loss: **0.1319**
+
+![Confusion Matrix](models/confusion_matrix.png)
+
+The confusion matrix is nearly a clean diagonal across all 25 classes. Two misclassifications in the validation set: `hello → yes` (1) and `monkey → draw` (1).
+
+Real-time accuracy on a full 24-sign live test suite: **~85%**, with the gap explained by natural signing variation — hands partially out of frame, lighting changes, signing speed. This is addressed through messy sequences and the FSM's occlusion tolerance.
+
+---
+
+## Project Structure
+
+```
+SignLanguageTrack/
+├── src/
+│   ├── collect_data.py     # webcam data collection with clean/messy modes
+│   ├── preprocess.py       # assembles X.npy / y.npy from per-sign .npy files
+│   └── train.py            # LSTM training, checkpointing, confusion matrix
+├── models/
+│   ├── asl_model.pth       # PyTorch weights
+│   └── confusion_matrix.png
+├── docs/                   # GitHub Pages deployment (served as static site)
+│   ├── index.html
+│   ├── style.css
+│   ├── main.js
+│   ├── inference.js        # browser-side port of app.py (MediaPipe + ONNX)
+│   └── asl_model.onnx
+├── app/                    # local Flask app
+│   ├── app.py
+│   ├── templates/
+│   │   └── index.html
+│   └── static/
+│       ├── css/style.css
+│       └── js/main.js      # includes structured real-time test suite
+├── data/                   # per-sign .npy sequences (gitignored)
+└── requirements.txt
+```
+
+---
+
+## Running Locally
+
+```bash
+git clone https://github.com/qasim-a/sign-language-track
+cd sign-language-track
+pip install -r requirements.txt
+python app/app.py
+# open http://localhost:5000
+```
+
+---
+
+## Stack
+
+**Training**: Python · PyTorch · MediaPipe · OpenCV · scikit-learn · NumPy  
+**Local app**: Flask · PyTorch · MediaPipe · OpenCV  
+**Browser app**: MediaPipe.js · ONNX Runtime Web · Vanilla JS  
+**Deployment**: GitHub Pages (static, no server)
+
+---
+
+## Supported Signs
+
+`hello` `yes` `no` `thank you` `please` `eat` `drink` `water` `more` `apple` `mother` `father` `book` `walk` `cold` `hot` `black` `carrot` `go` `day` `break` `cow` `monkey` `draw` `type`
