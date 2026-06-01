@@ -156,7 +156,7 @@ SignLanguageTrack/
 │   ├── index.html
 │   ├── style.css
 │   ├── main.js
-│   ├── inference.js        # browser-side port of app.py (MediaPipe + ONNX)
+│   ├── inference.js        # browser-side port of app/app.py (MediaPipe + ONNX)
 │   └── asl_model.onnx
 ├── app/                    # local Flask app
 │   ├── app.py
@@ -171,15 +171,30 @@ SignLanguageTrack/
 
 ---
 
-## Running Locally
+## Try It
+
+The live demo runs in the browser with no setup — just allow camera access and start signing. Supported signs are listed in the app and each links to a reference video on SignASL.
+
+**[Open Live Demo →](https://qasim-a.github.io/sign-language-track)**
+
+To run locally or train your own model on your own signs:
 
 ```bash
 git clone https://github.com/qasim-a/sign-language-track
 cd sign-language-track
 pip install -r requirements.txt
+
+# run the app against the existing trained model
 python app/app.py
 # open http://localhost:5000
+
+# or train your own model
+python src/collect_data.py   # record sequences via webcam
+python src/preprocess.py     # assemble into training arrays
+python src/train.py          # train and save the best model
 ```
+
+To add signs, edit the `SIGNS` list in `collect_data.py` to record data, then update `preprocess.py`, `train.py`, and `app.py` — all three must match.
 
 ---
 
