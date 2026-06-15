@@ -1,6 +1,6 @@
 # SignLanguageTrack
 
-Real-time ASL recognition that runs entirely in the browser. No server, no installation required. A webcam captures hand gestures, MediaPipe extracts skeletal landmarks, and a 2-layer LSTM classifies sequences of 30 frames into one of 24 signs.
+Real-time ASL recognition that runs entirely in the browser. No server, no installation required. A webcam captures hand gestures, MediaPipe extracts skeletal landmarks, and a 2-layer LSTM classifies sequences of 30 frames into one of 25 signs.
 
 **[Live Demo →](https://qasim-a.github.io/sign-language-track)**
 
@@ -72,7 +72,7 @@ The PyTorch model is exported to ONNX once; `docs/inference.js` is a faithful po
 
 ## Dataset
 
-~2,500 sequences across 25 classes collected via a custom pipeline (`collect_data.py`). 24 are user-facing signs; `nothing` is a control class that absorbs non-sign frames and is suppressed from output. Each sequence is 30 frames × 225 features, recorded at webcam framerate.
+~2,500 sequences across 26 classes collected via a custom pipeline (`collect_data.py`). 25 are user-facing signs; `nothing` is a control class that absorbs non-sign frames and is suppressed from output. Each sequence is 30 frames × 225 features, recorded at webcam framerate.
 
 | Sign | Clean | Messy | Total |
 |---|---|---|---|
@@ -135,9 +135,9 @@ Validation accuracy: **99.6%** | Loss: **0.1319**
 
 ![Confusion Matrix](models/confusion_matrix.png)
 
-The confusion matrix is nearly a clean diagonal across all 25 classes. Two misclassifications in the validation set: `hello → yes` (1) and `monkey → draw` (1).
+The confusion matrix is nearly a clean diagonal across all 26 classes. Two misclassifications in the validation set: `hello → yes` (1) and `monkey → draw` (1).
 
-Real-time accuracy on a full 24-sign live test suite: **~85%**, with the gap explained by natural signing variation — hands partially out of frame, lighting changes, signing speed. This is addressed through messy sequences and the FSM's occlusion tolerance.
+Real-time accuracy on a full 25-sign live test suite: **~85%**, with the gap explained by natural signing variation — hands partially out of frame, lighting changes, signing speed. This is addressed through messy sequences and the FSM's occlusion tolerance.
 
 ---
 
