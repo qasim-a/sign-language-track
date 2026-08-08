@@ -1,5 +1,7 @@
 # SignLanguageTrack
 
+> **This is Version 1 of the project.** It contains the original browser-only ONNX recognition demo and remains available with its live GitHub Pages deployment. Development continues in [ASL Lesson Recognition V2](https://github.com/qasim-a/asl-lesson-recognition), which explores structured lessons, model lifecycle management, evaluation, and practice telemetry.
+
 Real-time ASL recognition that runs entirely in the browser. No server, no installation required. A webcam captures hand gestures, MediaPipe extracts skeletal landmarks, and a 2-layer LSTM classifies sequences of 30 frames into one of 25 signs.
 
 **[Live Demo →](https://qasim-a.github.io/sign-language-track)**
